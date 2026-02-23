@@ -1,0 +1,130 @@
+// import Navbar from "@/components/Navbar";
+// import Footer from "@/components/Footer";
+// import { BarChart3, TrendingUp, Activity, Globe } from "lucide-react";
+// import { useOptimization } from "@/context/OptimizationContext";
+// const { data } = useOptimization();
+// const stats = data
+//   ? [
+//       { icon: BarChart3, label: "Fuel Saved", value: `${data.fuelSaved}%`, change: "" },
+//       { icon: TrendingUp, label: "CO₂ Reduction", value: `${data.co2Reduction} t`, change: "" },
+//       { icon: Activity, label: "Time Saved", value: `${data.timeSaved} hrs`, change: "" },
+//       { icon: Globe, label: "Distance Rerouted", value: `${data.distanceRerouted} nm`, change: "" },
+//     ]
+//   : [];
+
+// const Analytics = () => {
+  
+//   return (
+//     <div className="min-h-screen ocean-gradient flex flex-col">
+//       <Navbar />
+//       <main className="flex-1 pt-20">
+//         <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pt-8 pb-4">
+//           <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-1">Analytics</h1>
+//           <p className="text-sm text-muted-foreground">Historical performance metrics</p>
+//         </section>
+
+//         <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+//           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+//             {stats.map((s, i) => (
+//               <div
+//                 key={s.label}
+//                 className="glass-card-hover p-6"
+//                 style={{ animation: `slideUp 0.5s ease-out ${i * 100}ms both` }}
+//               >
+//                 <div className="flex items-center gap-3 mb-4">
+//                   <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+//                     <s.icon className="w-4 h-4 text-primary" />
+//                   </div>
+//                   <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{s.label}</span>
+//                 </div>
+//                 <div className="flex items-baseline gap-2">
+//                   <span className="text-3xl font-bold text-foreground">{s.value}</span>
+//                   <span className="text-xs text-success font-medium">{s.change}</span>
+//                 </div>
+//               </div>
+//             ))}
+//           </div>
+//         </section>
+
+//         <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+//           <div className="glass-card p-6 sm:p-8 min-h-[300px] flex items-center justify-center">
+//             <p className="text-sm text-muted-foreground">Charts and trend visualization — ready for Recharts integration</p>
+//           </div>
+//         </section>
+//       </main>
+//       <Footer />
+//     </div>
+//   );
+// };
+
+// export default Analytics;
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import { BarChart3, TrendingUp, Activity, Globe } from "lucide-react";
+import { useOptimization } from "@/context/OptimizationContext";
+
+const Analytics = () => {
+  const { data } = useOptimization();   // ✅ NOW INSIDE COMPONENT
+
+  const stats = data
+    ? [
+        { icon: BarChart3, label: "Fuel Saved", value: `${data.fuelSaved}%`, change: "" },
+        { icon: TrendingUp, label: "CO₂ Reduction", value: `${data.co2Reduction} t`, change: "" },
+        { icon: Activity, label: "Time Saved", value: `${data.timeSaved} hrs`, change: "" },
+        { icon: Globe, label: "Distance Rerouted", value: `${data.distanceRerouted} nm`, change: "" },
+      ]
+    : [];
+
+  return (
+    <div className="min-h-screen ocean-gradient flex flex-col">
+      <Navbar />
+      <main className="flex-1 pt-20">
+        <section className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto pt-8 pb-4">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-1">
+            Analytics
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Historical performance metrics
+          </p>
+        </section>
+
+        <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {stats.map((s, i) => (
+              <div
+                key={s.label}
+                className="glass-card-hover p-6"
+                style={{ animation: `slideUp 0.5s ease-out ${i * 100}ms both` }}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <s.icon className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    {s.label}
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-foreground">
+                    {s.value}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+          <div className="glass-card p-6 sm:p-8 min-h-[300px] flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">
+              Charts and trend visualization — ready for Recharts integration
+            </p>
+          </div>
+        </section>
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
+export default Analytics;
