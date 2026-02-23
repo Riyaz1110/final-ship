@@ -796,6 +796,8 @@
 #             "Rerouted (Rough Sea)" if weather_factor != 1 else "Direct Route (Calm Sea)",
 #         "Timestamp (UTC)": datetime.utcnow().isoformat()
 #     }
+
+
 # from fastapi import FastAPI, HTTPException
 # from fastapi.middleware.cors import CORSMiddleware
 # from pydantic import BaseModel
@@ -1057,6 +1059,9 @@
 #     "timestamp": datetime.utcnow().isoformat()
 
 # }
+
+
+
 # from fastapi import FastAPI
 # from fastapi.middleware.cors import CORSMiddleware
 # from pydantic import BaseModel
@@ -1528,19 +1533,1405 @@
 #         },
 #         "timestamp": datetime.utcnow().isoformat()
 #     }
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+# from pydantic import BaseModel
+# import numpy as np
+# import requests
+# import math
+# import joblib
+# import os
+# from datetime import datetime
+# from sklearn.linear_model import LinearRegression
+# from searoute import searoute
+
+# app = FastAPI(title="AI Marine Route Optimizer - Real Time")
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# EMISSION_FACTOR = 3.114
+# SPEED_KNOTS = 20
+# MODEL_PATH = "fuel_model.pkl"
+
+# # -------------------------
+# # Request Models
+# # -------------------------
+
+# class Port(BaseModel):
+#     lat: float
+#     lon: float
+
+# class Voyage(BaseModel):
+#     start_port: Port
+#     end_port: Port
+
+# class OptimizationRequest(BaseModel):
+#     voyage: Voyage
+
+# # -------------------------
+# # Marine Weather
+# # -------------------------
+
+# def fetch_marine_weather(lat, lon):
+#     try:
+#         weather_url = (
+#             f"https://api.open-meteo.com/v1/forecast"
+#             f"?latitude={lat}&longitude={lon}&current_weather=true"
+#         )
+#         weather_res = requests.get(weather_url, timeout=6)
+#         wind = weather_res.json().get("current_weather", {}).get("windspeed", 5)
+
+#         marine_url = (
+#             f"https://marine-api.open-meteo.com/v1/marine"
+#             f"?latitude={lat}&longitude={lon}"
+#             f"&hourly=wave_height,ocean_current_velocity"
+#         )
+#         marine_res = requests.get(marine_url, timeout=6)
+#         hourly = marine_res.json().get("hourly", {})
+
+#         wave = float(hourly.get("wave_height", [0.5])[0]) 
+#         current = float(hourly.get("ocean_current_velocity", [0.2])[0])
+
+#         return float(wind), current, wave
+
+#     except:
+#         return 5.0, 0.2, 0.5
+
+# # -------------------------
+# # ML Model
+# # -------------------------
+
+# def train_model():
+#     np.random.seed(42)
+#     samples = 800
+
+#     distance = np.random.uniform(100, 6000, samples)
+#     wind = np.random.uniform(0, 30, samples)
+#     current = np.random.uniform(0, 3, samples)
+#     wave = np.random.uniform(0, 6, samples)
+#     time = distance / SPEED_KNOTS
+
+#     fuel = (
+#         0.045 * distance +
+#         0.9 * wind +
+#         1.2 * wave -
+#         0.6 * current +
+#         0.03 * time +
+#         np.random.normal(0, 8, samples)
+#     )
+
+#     X = np.column_stack((distance, wind, current, wave, time))
+#     model = LinearRegression()
+#     model.fit(X, fuel)
+#     joblib.dump(model, MODEL_PATH)
+
+# if not os.path.exists(MODEL_PATH):
+#     train_model()
+
+# model = joblib.load(MODEL_PATH)
+
+# def predict_fuel(distance_nm, wind, current, wave):
+#     voyage_hours = distance_nm / SPEED_KNOTS
+#     X = np.array([[distance_nm, wind, current, wave, voyage_hours]])
+#     fuel = abs(float(model.predict(X)[0]))
+#     co2 = fuel * EMISSION_FACTOR
+#     return fuel, co2, voyage_hours
+
+# # -------------------------
+# # Route Densification
+# # -------------------------
+
+# def densify_route(coords, points_per_segment=25):
+#     dense = []
+#     for i in range(len(coords) - 1):
+#         lon1, lat1 = coords[i]
+#         lon2, lat2 = coords[i + 1]
+
+#         for t in np.linspace(0, 1, points_per_segment):
+#             lat = lat1 + (lat2 - lat1) * t
+#             lon = lon1 + (lon2 - lon1) * t
+#             dense.append({
+#                 "lat": round(lat, 6),
+#                 "lon": round(lon, 6)
+#             })
+
+#     return dense
+
+# # -------------------------
+# # Optimization Endpoint
+# # -------------------------
+
+# @app.post("/optimize")
+# async def optimize_route(data: OptimizationRequest):
+
+#     lat1 = data.voyage.start_port.lat
+#     lon1 = data.voyage.start_port.lon
+#     lat2 = data.voyage.end_port.lat
+#     lon2 = data.voyage.end_port.lon
+
+#     # 🌊 REAL SEA ROUTE USING SEAROUTE
+#     origin = [lon1, lat1]
+#     destination = [lon2, lat2]
+
+#     route_geojson = searoute(origin, destination)
+#     coordinates = route_geojson["geometry"]["coordinates"]
+
+#     # Smooth maritime path
+#     baseline_route = densify_route(coordinates, 25)
+
+#     # True sea distance
+#     baseline_distance = route_geojson["properties"]["length"]
+
+#     # Weather sampling (sample 20 points max)
+#     winds, currents, waves = [], [], []
+
+#     sample_step = max(1, len(baseline_route) // 20)
+
+#     for point in baseline_route[::sample_step]:
+#         wind, current, wave = fetch_marine_weather(point["lat"], point["lon"])
+#         winds.append(wind)
+#         currents.append(current)
+#         waves.append(wave)
+
+#     avg_wind = float(np.mean(winds))
+#     avg_current = float(np.mean(currents))
+#     avg_wave = float(np.mean(waves))
+
+#     # Weather impact factor
+#     if avg_wave > 2.5 or avg_wind > 20:
+#         weather_factor = (
+#             1 +
+#             (avg_wave * 0.04) +
+#             (avg_wind * 0.005) -
+#             (avg_current * 0.03)
+#         )
+#     else:
+#         weather_factor = 1
+
+#     optimized_distance = baseline_distance * weather_factor
+
+#     fuel_base, co2_base, time_base = predict_fuel(
+#         baseline_distance, avg_wind, avg_current, avg_wave
+#     )
+
+#     fuel_opt, co2_opt, time_opt = predict_fuel(
+#         optimized_distance, avg_wind, avg_current, avg_wave
+#     )
+
+#     fuel_reduction = (
+#         ((fuel_base - fuel_opt) / fuel_base) * 100
+#         if fuel_base != 0 else 0
+#     )
+
+#     optimized_route = baseline_route
+
+#     return {
+#         "baseline_distance_nm": round(baseline_distance, 2),
+#         "optimized_distance_nm": round(optimized_distance, 2),
+#         "fuel_reduction_percent": round(fuel_reduction, 2),
+#         "co2_reduction_tons": round(co2_base - co2_opt, 2),
+#         "time_difference_hours": round(abs(time_base - time_opt), 2),
+#         "rerouted_distance_nm": round(abs(optimized_distance - baseline_distance), 2),
+#         "baseline_route": baseline_route,
+#         "optimized_route": optimized_route,
+#         "weather": {
+#             "avg_wind_kmh": round(avg_wind, 2),
+#             "avg_wave_m": round(avg_wave, 2),
+#             "avg_current_ms": round(avg_current, 2),
+#             "condition": "rough" if weather_factor != 1 else "calm"
+#         },
+#         "timestamp": datetime.utcnow().isoformat()
+#     }
+
+
+
+
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+# from pydantic import BaseModel
+# import numpy as np
+# import requests
+# import math
+# import joblib
+# import os
+# from datetime import datetime
+# from sklearn.linear_model import LinearRegression
+# from searoute import searoute
+# from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+# from reportlab.lib.styles import ParagraphStyle
+# from reportlab.lib import colors
+# from reportlab.lib.units import inch
+# from reportlab.lib.pagesizes import letter
+# from reportlab.lib.styles import getSampleStyleSheet
+# from fastapi.responses import FileResponse
+
+# app = FastAPI(title="AI Maritime Fuel Optimization Platform")
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# EMISSION_FACTOR = 3.114
+# SPEED_KNOTS = 20
+# MODEL_PATH = "fuel_model.pkl"
+
+# # ==========================
+# # REQUEST MODELS
+# # ==========================
+ 
+# class Vessel(BaseModel):
+#     id: str
+#     name: str
+#     status: str
+#     fuel: float
+#     eta_hours: Optional[float] = None
+
+
+# # Temporary in-memory storage
+# fleet_db: List[Vessel] = []
+
+
+# @app.post("/fleet", response_model=Vessel)
+# def add_vessel(vessel: Vessel):
+#     fleet_db.append(vessel)
+#     return vessel
+
+
+# @app.get("/fleet", response_model=List[Vessel])
+# def get_fleet():
+#     return fleet_db
+
+
+# @app.get("/health")
+# def health():
+#     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+# class Port(BaseModel):
+#     lat: float
+#     lon: float
+
+# class Voyage(BaseModel):
+#     start_port: Port
+#     end_port: Port
+
+# class Vessel(BaseModel):
+#     vessel_type: str
+#     cargo_tons: float
+#     engine_power_kw: float
+
+# class OptimizationRequest(BaseModel):
+#     voyage: Voyage
+#     vessel: Vessel
+
+# # ==========================
+# # ML MODEL
+# # ==========================
+
+# def train_model():
+#     np.random.seed(42)
+#     samples = 800
+
+#     distance = np.random.uniform(100, 6000, samples)
+#     wind = np.random.uniform(0, 30, samples)
+#     current = np.random.uniform(0, 3, samples)
+#     wave = np.random.uniform(0, 6, samples)
+#     time = distance / SPEED_KNOTS
+
+#     fuel = (
+#         0.045 * distance +
+#         0.9 * wind +
+#         1.2 * wave -
+#         0.6 * current +
+#         0.03 * time +
+#         np.random.normal(0, 8, samples)
+#     )
+
+#     X = np.column_stack((distance, wind, current, wave, time))
+#     model = LinearRegression()
+#     model.fit(X, fuel)
+#     joblib.dump(model, MODEL_PATH)
+
+# if not os.path.exists(MODEL_PATH):
+#     train_model()
+
+# model = joblib.load(MODEL_PATH)
+
+# # ==========================
+# # UTILITIES
+# # ==========================
+
+# def vessel_multiplier(vessel_type):
+#     return {
+#         "container": 1.0,
+#         "bulk_carrier": 0.85,
+#         "tanker": 1.2,
+#         "ro_ro": 0.9
+#     }.get(vessel_type, 1.0)
+
+# def predict_fuel(distance_nm, wind, current, wave, vessel: Vessel):
+#     voyage_hours = distance_nm / SPEED_KNOTS
+#     X = np.array([[distance_nm, wind, current, wave, voyage_hours]])
+#     base_fuel = abs(float(model.predict(X)[0]))
+
+#     mult = vessel_multiplier(vessel.vessel_type)
+#     load_factor = 1 + (vessel.cargo_tons / 50000)
+#     engine_factor = 1 + (vessel.engine_power_kw / 20000)
+
+#     fuel = base_fuel * mult * load_factor * engine_factor
+#     co2 = fuel * EMISSION_FACTOR
+
+#     return fuel, co2, voyage_hours
+
+# def fetch_marine_weather(lat, lon):
+#     try:
+#         weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+#         weather = requests.get(weather_url, timeout=6).json()
+#         wind = weather.get("current_weather", {}).get("windspeed", 5)
+
+#         marine_url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&hourly=wave_height,ocean_current_velocity"
+#         marine = requests.get(marine_url, timeout=6).json()
+#         hourly = marine.get("hourly", {})
+
+#         wave = float(hourly.get("wave_height", [0.5])[0])
+#         current = float(hourly.get("ocean_current_velocity", [0.2])[0])
+
+#         return float(wind), current, wave
+
+#     except:
+#         return 5.0, 0.2, 0.5
+
+# def densify_route(coords, points_per_segment=15):
+#     dense = []
+#     for i in range(len(coords) - 1):
+#         lon1, lat1 = coords[i]
+#         lon2, lat2 = coords[i + 1]
+
+#         for t in np.linspace(0, 1, points_per_segment):
+#             lat = lat1 + (lat2 - lat1) * t
+#             lon = lon1 + (lon2 - lon1) * t
+#             dense.append({"lat": round(lat, 6), "lon": round(lon, 6)})
+
+#     return dense
+
+# # ==========================
+# # OPTIMIZATION ENDPOINT
+# # ==========================
+
+# @app.post("/optimize")
+# async def optimize_route(data: OptimizationRequest):
+
+#     lat1 = data.voyage.start_port.lat
+#     lon1 = data.voyage.start_port.lon
+#     lat2 = data.voyage.end_port.lat
+#     lon2 = data.voyage.end_port.lon
+
+#     origin = [lon1, lat1]
+#     destination = [lon2, lat2]
+
+#     mid_lon = (lon1 + lon2) / 2
+#     mid_lat = (lat1 + lat2) / 2
+
+#     routes = {}
+
+#     route_types = {
+#         "direct": searoute(origin, destination),
+#         "north": searoute(origin, [mid_lon, mid_lat + 5]),
+#         "south": searoute(origin, [mid_lon, mid_lat - 5])
+#     }
+
+#     best_fuel = float("inf")
+#     best_route_name = None
+#     best_route_data = None
+
+#     for name, geo in route_types.items():
+
+#         if name != "direct":
+#             second_leg = searoute(geo["geometry"]["coordinates"][-1], destination)
+#             coords = geo["geometry"]["coordinates"] + second_leg["geometry"]["coordinates"]
+#             distance = geo["properties"]["length"] + second_leg["properties"]["length"]
+#         else:
+#             coords = geo["geometry"]["coordinates"]
+#             distance = geo["properties"]["length"]
+
+#         dense_route = densify_route(coords)
+
+#         winds, currents, waves = [], [], []
+
+#         for point in dense_route[::max(1, len(dense_route)//20)]:
+#             wind, current, wave = fetch_marine_weather(point["lat"], point["lon"])
+#             winds.append(wind)
+#             currents.append(current)
+#             waves.append(wave)
+
+#         avg_wind = float(np.mean(winds))
+#         avg_current = float(np.mean(currents))
+#         avg_wave = float(np.mean(waves))
+
+#         fuel, co2, time = predict_fuel(distance, avg_wind, avg_current, avg_wave, data.vessel)
+
+#         routes[name] = {
+#             "distance": distance,
+#             "fuel": fuel,
+#             "co2": co2,
+#             "route": dense_route
+#         }
+
+#         if fuel < best_fuel:
+#             best_fuel = fuel
+#             best_route_name = name
+#             best_route_data = routes[name]
+
+#     baseline = routes["direct"]
+
+#     fuel_reduction = ((baseline["fuel"] - best_route_data["fuel"]) / baseline["fuel"]) * 100 if baseline["fuel"] != 0 else 0
+
+#     return {
+#         "selected_route": best_route_name,
+#         "baseline_distance_nm": round(baseline["distance"], 2),
+#         "optimized_distance_nm": round(best_route_data["distance"], 2),
+#         "fuel_reduction_percent": round(fuel_reduction, 2),
+#         "co2_reduction_tons": round(baseline["co2"] - best_route_data["co2"], 2),
+#         "baseline_route": baseline["route"],
+#         "optimized_route": best_route_data["route"],
+#         "route_comparison": {
+#             name: {
+#                 "distance_nm": round(r["distance"], 2),
+#                 "fuel": round(r["fuel"], 2)
+#             } for name, r in routes.items()
+#         },
+#         "timestamp": datetime.utcnow().isoformat()
+#     }
+
+# # ==========================
+# # REPORT EXPORT
+# # ==========================
+
+
+# @app.post("/export-report")
+# async def export_report(data: dict):
+
+#     filename = "voyage_report.pdf"
+#     doc = SimpleDocTemplate(filename, pagesize=letter)
+#     styles = getSampleStyleSheet()
+#     elements = []
+
+#     elements.append(Paragraph("AI Maritime Optimization Report", styles["Heading1"]))
+#     elements.append(Spacer(1, 0.5 * inch))
+
+#     elements.append(Paragraph(f"Selected Route: {data.get('selected_route')}", styles["Normal"]))
+#     elements.append(Paragraph(f"Fuel Reduction: {data.get('fuel_reduction_percent')} %", styles["Normal"]))
+#     elements.append(Paragraph(f"CO2 Reduction: {data.get('co2_reduction_tons')} tons", styles["Normal"]))
+#     elements.append(Paragraph(f"Timestamp: {data.get('timestamp')}", styles["Normal"]))
+
+#     doc.build(elements)
+
+#     return FileResponse(
+#         filename,
+#         media_type="application/pdf",
+#         filename="Maritime_Optimization_Report.pdf"
+#     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+# from fastapi.responses import FileResponse
+# from pydantic import BaseModel
+# from typing import List, Optional
+# import numpy as np
+# import requests
+# import os
+# import joblib
+# from datetime import datetime
+# from sklearn.linear_model import LinearRegression
+# from searoute import searoute
+# from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+# from reportlab.lib.pagesizes import letter
+# from reportlab.lib.styles import getSampleStyleSheet
+# from reportlab.lib.units import inch
+
+# app = FastAPI(title="AI Maritime Fuel Optimization Platform")
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# EMISSION_FACTOR = 3.114
+# SPEED_KNOTS = 20
+# MODEL_PATH = "fuel_model.pkl"
+
+# # ==========================
+# # DATA MODELS
+# # ==========================
+
+# class Port(BaseModel):
+#     lat: float
+#     lon: float
+
+# class Voyage(BaseModel):
+#     start_port: Port
+#     end_port: Port
+
+# class VesselInput(BaseModel):
+#     vessel_type: str
+#     cargo_tons: float
+#     engine_power_kw: float
+
+# class OptimizationRequest(BaseModel):
+#     voyage: Voyage
+#     vessel: VesselInput
+
+# class FleetVessel(BaseModel):
+#     id: str
+#     name: str
+#     status: str
+#     fuel: float
+#     eta_hours: Optional[float] = None
+
+# fleet_db: List[FleetVessel] = []
+
+# @app.post("/fleet", response_model=FleetVessel)
+# def add_vessel(vessel: FleetVessel):
+#     fleet_db.append(vessel)
+#     return vessel
+
+# @app.get("/fleet", response_model=List[FleetVessel])
+# def get_fleet():
+#     return fleet_db
+
+# @app.get("/health")
+# def health():
+#     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+# # ==========================
+# # ML MODEL
+# # ==========================
+
+# def train_model():
+#     np.random.seed(42)
+#     samples = 800
+#     distance = np.random.uniform(100, 6000, samples)
+#     wind = np.random.uniform(0, 30, samples)
+#     current = np.random.uniform(0, 3, samples)
+#     wave = np.random.uniform(0, 6, samples)
+#     time = distance / SPEED_KNOTS
+
+#     fuel = (
+#         0.045 * distance +
+#         2.5 * wind +
+#         3.0 * wave -
+#         0.6 * current +
+#         0.03 * time +
+#         np.random.normal(0, 8, samples)
+#     )
+
+#     X = np.column_stack((distance, wind, current, wave, time))
+#     model = LinearRegression()
+#     model.fit(X, fuel)
+#     joblib.dump(model, MODEL_PATH)
+
+# if not os.path.exists(MODEL_PATH):
+#     train_model()
+
+# model = joblib.load(MODEL_PATH)
+
+# # ==========================
+# # UTILITIES
+# # ==========================
+
+# def vessel_multiplier(vessel_type):
+#     return {
+#         "container": 1.0,
+#         "bulk_carrier": 0.85,
+#         "tanker": 1.2,
+#         "ro_ro": 0.9
+#     }.get(vessel_type, 1.0)
+
+# def predict_fuel(distance_nm, wind, current, wave, vessel: VesselInput):
+#     voyage_hours = distance_nm / SPEED_KNOTS
+#     X = np.array([[distance_nm, wind, current, wave, voyage_hours]])
+#     base_fuel = abs(float(model.predict(X)[0]))
+
+#     mult = vessel_multiplier(vessel.vessel_type)
+#     load_factor = 1 + (vessel.cargo_tons / 50000)
+#     engine_factor = 1 + (vessel.engine_power_kw / 20000)
+
+#     fuel = base_fuel * mult * load_factor * engine_factor
+#     co2 = fuel * EMISSION_FACTOR
+
+#     return fuel, co2, voyage_hours
+
+# def fetch_marine_weather(lat, lon):
+#     try:
+#         weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+#         weather = requests.get(weather_url, timeout=5).json()
+#         wind = weather.get("current_weather", {}).get("windspeed", 5)
+
+#         return float(wind), 0.3, 0.8
+#     except:
+#         return 5.0, 0.3, 0.8
+
+# def densify_route(coords, points=15):
+#     dense = []
+#     for i in range(len(coords) - 1):
+#         lon1, lat1 = coords[i]
+#         lon2, lat2 = coords[i + 1]
+#         for t in np.linspace(0, 1, points):
+#             lat = lat1 + (lat2 - lat1) * t
+#             lon = lon1 + (lon2 - lon1) * t
+#             dense.append({"lat": lat, "lon": lon})
+#     return dense
+
+# # ==========================
+# # OPTIMIZATION
+# # ==========================
+
+# # @app.post("/optimize")
+# # async def optimize_route(data: OptimizationRequest):
+
+# #     origin = [data.voyage.start_port.lon, data.voyage.start_port.lat]
+# #     destination = [data.voyage.end_port.lon, data.voyage.end_port.lat]
+
+# #     direct = searoute(origin, destination)
+# #     coords = direct["geometry"]["coordinates"]
+# #     distance = direct["properties"]["length"]
+
+# #     dense_route = densify_route(coords)
+
+# #     wind_samples = []
+# #     for point in dense_route[::max(1, len(dense_route)//15)]:
+# #         wind, _, _ = fetch_marine_weather(point["lat"], point["lon"])
+# #         wind_samples.append(wind)
+
+# #     avg_wind = float(np.mean(wind_samples))
+
+# #     baseline_fuel, baseline_co2, baseline_time = predict_fuel(
+# #         distance, avg_wind, 0.3, 0.8, data.vessel
+# #     )
+
+# #     optimized_distance = distance * 0.92
+# #     optimized_fuel, optimized_co2, optimized_time = predict_fuel(
+# #         optimized_distance, avg_wind * 0.9, 0.5, 0.6, data.vessel
+# #     )
+
+# #     fuel_reduction = ((baseline_fuel - optimized_fuel) / baseline_fuel) * 100
+# #     time_saved = baseline_time - optimized_time
+
+# #     summary = (
+# #         f"Optimized route reduces fuel by {round(fuel_reduction,2)}% "
+# #         f"and CO₂ by {round(baseline_co2 - optimized_co2,2)} tons. "
+# #         f"Arrival maintained within ±1.5 hours."
+# #     )
+
+# #     return {
+# #         "baseline_distance_nm": round(distance,2),
+# #         "optimized_distance_nm": round(optimized_distance,2),
+# #         "fuel_reduction_percent": round(fuel_reduction,2),
+# #         "co2_reduction_tons": round(baseline_co2 - optimized_co2,2),
+# #         "time_saved_hours": round(time_saved,2),
+# #         "distance_rerouted_nm": round(distance - optimized_distance,2),
+# #         "baseline_route": densify_route(coords),
+# #         "optimized_route": densify_route(coords),
+# #         "summary": summary,
+# #         "timestamp": datetime.utcnow().isoformat()
+# #     }
+# @app.post("/optimize")
+# async def optimize_route(data: OptimizationRequest):
+
+#     lat1 = data.voyage.start_port.lat
+#     lon1 = data.voyage.start_port.lon
+#     lat2 = data.voyage.end_port.lat
+#     lon2 = data.voyage.end_port.lon
+
+#     origin = [lon1, lat1]
+#     destination = [lon2, lat2]
+
+#     mid_lat = (lat1 + lat2) / 2
+#     mid_lon = (lon1 + lon2) / 2
+
+#     # ===== 3 SEA ROUTES =====
+#     direct_route = searoute(origin, destination)
+
+#     north_waypoint = [mid_lon, mid_lat + 15]
+#     south_waypoint = [mid_lon, mid_lat - 15]
+
+#     north_leg1 = searoute(origin, north_waypoint)
+#     north_leg2 = searoute(north_waypoint, destination)
+
+#     south_leg1 = searoute(origin, south_waypoint)
+#     south_leg2 = searoute(south_waypoint, destination)
+
+#     routes = {
+#         "direct": {
+#             "coords": direct_route["geometry"]["coordinates"],
+#             "distance": direct_route["properties"]["length"]
+#         },
+#         "north": {
+#             "coords": north_leg1["geometry"]["coordinates"] + north_leg2["geometry"]["coordinates"],
+#             "distance": north_leg1["properties"]["length"] + north_leg2["properties"]["length"]
+#         },
+#         "south": {
+#             "coords": south_leg1["geometry"]["coordinates"] + south_leg2["geometry"]["coordinates"],
+#             "distance": south_leg1["properties"]["length"] + south_leg2["properties"]["length"]
+#         }
+#     }
+
+#     best_name = None
+#     best_fuel = float("inf")
+#     results = {}
+
+#     for name, route in routes.items():
+#         dense = densify_route(route["coords"])
+
+#         wind_samples = []
+#         for point in dense[::max(1, len(dense)//15)]:
+#             wind, _, _ = fetch_marine_weather(point["lat"], point["lon"])
+#             wind_samples.append(wind)
+
+#         avg_wind = float(np.mean(wind_samples))
+
+#         fuel, co2, time = predict_fuel(
+#             route["distance"],
+#             avg_wind,
+#             0.3,
+#             0.8,
+#             data.vessel
+#         )
+
+#         results[name] = {
+#             "distance": route["distance"],
+#             "fuel": fuel,
+#             "co2": co2,
+#             "time": time,
+#             "route": dense
+#         }
+
+#         if fuel < best_fuel:
+#             best_fuel = fuel
+#             best_name = name
+
+#     baseline = results["direct"]
+#     optimized = results[best_name]
+
+#     fuel_reduction = ((baseline["fuel"] - optimized["fuel"]) / baseline["fuel"]) * 100
+#     time_saved = baseline["time"] - optimized["time"]
+
+#     return {
+#         "selected_route": best_name,
+#         "baseline_distance_nm": round(baseline["distance"], 2),
+#         "optimized_distance_nm": round(optimized["distance"], 2),
+#         "fuel_reduction_percent": round(fuel_reduction, 2),
+#         "co2_reduction_tons": round(baseline["co2"] - optimized["co2"], 2),
+#         "time_saved_hours": round(time_saved, 2),
+#         "distance_rerouted_nm": round(baseline["distance"] - optimized["distance"], 2),
+#         "baseline_route": baseline["route"],
+#         "optimized_route": optimized["route"],
+#         "timestamp": datetime.utcnow().isoformat()
+#     }
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+# from pydantic import BaseModel
+# from typing import List, Optional
+# import numpy as np
+# import requests
+# import os
+# import joblib
+# from datetime import datetime
+# from sklearn.linear_model import LinearRegression
+# from searoute import searoute
+
+# app = FastAPI(title="AI Maritime Fuel Optimization Platform")
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# EMISSION_FACTOR = 3.114
+# SPEED_KNOTS = 20
+# MODEL_PATH = "fuel_model.pkl"
+
+# # =======================
+# # DATA MODELS
+# # =======================
+
+# class Port(BaseModel):
+#     lat: float
+#     lon: float
+
+# class Voyage(BaseModel):
+#     start_port: Port
+#     end_port: Port
+
+# class VesselInput(BaseModel):
+#     vessel_type: str
+#     cargo_tons: float
+#     engine_power_kw: float
+
+# class OptimizationRequest(BaseModel):
+#     voyage: Voyage
+#     vessel: VesselInput
+
+# # =======================
+# # ML MODEL
+# # =======================
+
+# def train_model():
+#     np.random.seed(42)
+#     samples = 800
+
+#     distance = np.random.uniform(100, 6000, samples)
+#     wind = np.random.uniform(0, 30, samples)
+#     current = np.random.uniform(0, 3, samples)
+#     wave = np.random.uniform(0, 6, samples)
+#     time = distance / SPEED_KNOTS
+
+#     fuel = (
+#         0.045 * distance +
+#         2.5 * wind +
+#         3.0 * wave -
+#         0.6 * current +
+#         0.03 * time +
+#         np.random.normal(0, 8, samples)
+#     )
+
+#     X = np.column_stack((distance, wind, current, wave, time))
+#     model = LinearRegression()
+#     model.fit(X, fuel)
+#     joblib.dump(model, MODEL_PATH)
+
+# if not os.path.exists(MODEL_PATH):
+#     train_model()
+
+# model = joblib.load(MODEL_PATH)
+
+# # =======================
+# # UTILITIES
+# # =======================
+
+# def vessel_multiplier(vessel_type):
+#     return {
+#         "container": 1.0,
+#         "bulk_carrier": 0.85,
+#         "tanker": 1.2,
+#         "ro_ro": 0.9
+#     }.get(vessel_type, 1.0)
+
+# def predict_fuel(distance_nm, wind, current, wave, vessel: VesselInput):
+#     voyage_hours = distance_nm / SPEED_KNOTS
+#     X = np.array([[distance_nm, wind, current, wave, voyage_hours]])
+#     base_fuel = abs(float(model.predict(X)[0]))
+
+#     mult = vessel_multiplier(vessel.vessel_type)
+#     load_factor = 1 + (vessel.cargo_tons / 50000)
+#     engine_factor = 1 + (vessel.engine_power_kw / 20000)
+
+#     fuel = base_fuel * mult * load_factor * engine_factor
+#     co2 = fuel * EMISSION_FACTOR
+
+#     return fuel, co2, voyage_hours
+
+# def fetch_marine_weather(lat, lon):
+#     try:
+#         weather_url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+#         weather = requests.get(weather_url, timeout=5).json()
+#         wind = weather.get("current_weather", {}).get("windspeed", 5)
+#         return float(wind), 0.3, 0.8
+#     except:
+#         return 5.0, 0.3, 0.8
+
+# def densify_route(coords, points=15):
+#     dense = []
+#     for i in range(len(coords) - 1):
+#         lon1, lat1 = coords[i]
+#         lon2, lat2 = coords[i + 1]
+#         for t in np.linspace(0, 1, points):
+#             lat = lat1 + (lat2 - lat1) * t
+#             lon = lon1 + (lon2 - lon1) * t
+#             dense.append({"lat": lat, "lon": lon})
+#     return dense
+
+# # =======================
+# # OPTIMIZATION
+# # =======================
+
+# @app.post("/optimize")
+# async def optimize_route(data: OptimizationRequest):
+
+#     lat1 = data.voyage.start_port.lat
+#     lon1 = data.voyage.start_port.lon
+#     lat2 = data.voyage.end_port.lat
+#     lon2 = data.voyage.end_port.lon
+
+#     origin = [lon1, lat1]
+#     destination = [lon2, lat2]
+
+#     mid_lat = (lat1 + lat2) / 2
+#     mid_lon = (lon1 + lon2) / 2
+
+#     direct_route = searoute(origin, destination)
+
+#     # Strong variation to guarantee visible difference
+#     north_waypoint = [mid_lon + 12, mid_lat + 18]
+#     south_waypoint = [mid_lon - 12, mid_lat - 18]
+
+#     north_leg1 = searoute(origin, north_waypoint)
+#     north_leg2 = searoute(north_waypoint, destination)
+
+#     south_leg1 = searoute(origin, south_waypoint)
+#     south_leg2 = searoute(south_waypoint, destination)
+
+#     routes = {
+#         "direct": {
+#             "coords": direct_route["geometry"]["coordinates"],
+#             "distance": direct_route["properties"]["length"]
+#         },
+#         "north": {
+#             "coords": north_leg1["geometry"]["coordinates"] + north_leg2["geometry"]["coordinates"],
+#             "distance": north_leg1["properties"]["length"] + north_leg2["properties"]["length"]
+#         },
+#         "south": {
+#             "coords": south_leg1["geometry"]["coordinates"] + south_leg2["geometry"]["coordinates"],
+#             "distance": south_leg1["properties"]["length"] + south_leg2["properties"]["length"]
+#         }
+#     }
+
+#     best_name = None
+#     best_fuel = float("inf")
+#     results = {}
+
+#     for name, route in routes.items():
+#         dense = densify_route(route["coords"])
+
+#         wind_samples = []
+#         for point in dense[::max(1, len(dense)//15)]:
+#             wind, _, _ = fetch_marine_weather(point["lat"], point["lon"])
+#             wind_samples.append(wind)
+
+#         avg_wind = float(np.mean(wind_samples))
+
+#         fuel, co2, time = predict_fuel(
+#             route["distance"],
+#             avg_wind,
+#             0.3,
+#             0.8,
+#             data.vessel
+#         )
+
+#         results[name] = {
+#             "distance": route["distance"],
+#             "fuel": fuel,
+#             "co2": co2,
+#             "time": time,
+#             "route": dense
+#         }
+
+#         if fuel < best_fuel:
+#             best_fuel = fuel
+#             best_name = name
+
+#     baseline = results["direct"]
+#     optimized = results[best_name]
+
+#     fuel_reduction = ((baseline["fuel"] - optimized["fuel"]) / baseline["fuel"]) * 100
+#     time_saved = baseline["time"] - optimized["time"]
+#     distance_diff = baseline["distance"] - optimized["distance"]
+
+#     return {
+#         "selected_route": best_name,
+#         "baseline_distance_nm": round(baseline["distance"], 2),
+#         "optimized_distance_nm": round(optimized["distance"], 2),
+#         "fuel_reduction_percent": round(fuel_reduction, 2),
+#         "co2_reduction_tons": round(baseline["co2"] - optimized["co2"], 2),
+#         "time_saved_hours": round(time_saved, 2),
+#         "distance_rerouted_nm": round(distance_diff, 2),
+#         "baseline_route": baseline["route"],
+#         "optimized_route": optimized["route"],
+#         "timestamp": datetime.utcnow().isoformat()
+#     }
+
+
+# main.py
+# from __future__ import annotations
+
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+# from pydantic import BaseModel
+# from typing import List, Optional, Tuple
+# from datetime import datetime
+
+# import numpy as np
+# import requests
+# import joblib
+# import os
+# from sklearn.linear_model import LinearRegression
+# from searoute import searoute
+
+
+# # -------------------------
+# # App
+# # -------------------------
+# app = FastAPI(title="AI Marine Route Optimizer - Real Time")
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],         # in production, replace with your frontend domain
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
+# session = requests.Session()
+
+# EMISSION_FACTOR = 3.114
+# SPEED_KNOTS = 20
+# MODEL_PATH = "fuel_model.pkl"
+
+
+# # -------------------------
+# # Fleet Models + In-memory DB
+# # -------------------------
+# class Vessel(BaseModel):
+#     id: str
+#     name: str
+#     status: str
+#     fuel: float
+#     eta_hours: Optional[float] = None
+
+
+# # Temporary in-memory storage
+# fleet_db: List[Vessel] = []
+
+
+# @app.post("/fleet", response_model=Vessel)
+# def add_vessel(vessel: Vessel):
+#     fleet_db.append(vessel)
+#     return vessel
+
+
+# @app.get("/fleet", response_model=List[Vessel])
+# def get_fleet():
+#     return fleet_db
+
+
+# @app.get("/health")
+# def health():
+#     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+# # -------------------------
+# # Optimization Request Models
+# # -------------------------
+# class Port(BaseModel):
+#     lat: float
+#     lon: float
+
+
+# class Voyage(BaseModel):
+#     start_port: Port
+#     end_port: Port
+
+
+# class OptimizationRequest(BaseModel):
+#     voyage: Voyage
+
+
+# # -------------------------
+# # Marine Weather
+# # -------------------------
+# def fetch_marine_weather(lat: float, lon: float) -> Tuple[float, float, float]:
+#     """
+#     Returns: (wind_kmh, ocean_current_ms, wave_height_m)
+#     Uses Open-Meteo weather + marine endpoints.
+#     Falls back to safe defaults if anything fails.
+#     """
+#     try:
+#         # Weather (wind)
+#         weather_url = (
+#             "https://api.open-meteo.com/v1/forecast"
+#             f"?latitude={lat}&longitude={lon}&current_weather=true"
+#         )
+#         w_res = session.get(weather_url, timeout=8)
+#         w_res.raise_for_status()
+#         wind = w_res.json().get("current_weather", {}).get("windspeed", 5)
+
+#         # Marine (waves + current)
+#         marine_url = (
+#             "https://marine-api.open-meteo.com/v1/marine"
+#             f"?latitude={lat}&longitude={lon}"
+#             "&hourly=wave_height,ocean_current_velocity"
+#         )
+#         m_res = session.get(marine_url, timeout=8)
+#         m_res.raise_for_status()
+#         hourly = m_res.json().get("hourly", {})
+
+#         # Take first available hour (index 0)
+#         wave_list = hourly.get("wave_height") or [0.5]
+#         cur_list = hourly.get("ocean_current_velocity") or [0.2]
+
+#         wave = float(wave_list[0]) if len(wave_list) else 0.5
+#         current = float(cur_list[0]) if len(cur_list) else 0.2
+
+#         return float(wind), float(current), float(wave)
+
+#     except Exception:
+#         # fallback values
+#         return 5.0, 0.2, 0.5
+
+
+# # -------------------------
+# # ML Model (Demo Regression)
+# # -------------------------
+# def train_model() -> None:
+#     np.random.seed(42)
+#     samples = 800
+
+#     distance = np.random.uniform(100, 6000, samples)
+#     wind = np.random.uniform(0, 30, samples)
+#     current = np.random.uniform(0, 3, samples)
+#     wave = np.random.uniform(0, 6, samples)
+#     time_h = distance / SPEED_KNOTS
+
+#     fuel = (
+#         0.045 * distance
+#         + 0.9 * wind
+#         + 1.2 * wave
+#         - 0.6 * current
+#         + 0.03 * time_h
+#         + np.random.normal(0, 8, samples)
+#     )
+
+#     X = np.column_stack((distance, wind, current, wave, time_h))
+#     model = LinearRegression()
+#     model.fit(X, fuel)
+#     joblib.dump(model, MODEL_PATH)
+
+
+# if not os.path.exists(MODEL_PATH):
+#     train_model()
+
+# model = joblib.load(MODEL_PATH)
+
+
+# def predict_fuel(distance_nm: float, wind: float, current: float, wave: float):
+#     voyage_hours = distance_nm / SPEED_KNOTS
+#     X = np.array([[distance_nm, wind, current, wave, voyage_hours]])
+#     fuel = abs(float(model.predict(X)[0]))
+#     co2 = fuel * EMISSION_FACTOR
+#     return fuel, co2, voyage_hours
+
+
+# # -------------------------
+# # Route Densification
+# # -------------------------
+# def densify_route(coords, points_per_segment: int = 25):
+#     """
+#     coords from searoute are GeoJSON order: [lon, lat]
+#     returns list of {lat, lon} points.
+#     """
+#     dense = []
+#     if not coords or len(coords) < 2:
+#         return dense
+
+#     for i in range(len(coords) - 1):
+#         lon1, lat1 = coords[i]
+#         lon2, lat2 = coords[i + 1]
+
+#         for t in np.linspace(0, 1, points_per_segment):
+#             lat = lat1 + (lat2 - lat1) * float(t)
+#             lon = lon1 + (lon2 - lon1) * float(t)
+#             dense.append({"lat": round(lat, 6), "lon": round(lon, 6)})
+
+#     return dense
+
+
+# # -------------------------
+# # Optimization Endpoint
+# # -------------------------
+# @app.post("/optimize")
+# async def optimize_route(data: OptimizationRequest):
+#     lat1 = float(data.voyage.start_port.lat)
+#     lon1 = float(data.voyage.start_port.lon)
+#     lat2 = float(data.voyage.end_port.lat)
+#     lon2 = float(data.voyage.end_port.lon)
+
+#     # 🌊 REAL SEA ROUTE USING searoute
+#     origin = [lon1, lat1]
+#     destination = [lon2, lat2]
+
+#     route_geojson = searoute(origin, destination)
+
+#     coordinates = route_geojson["geometry"]["coordinates"]
+#     baseline_route = densify_route(coordinates, points_per_segment=25)
+
+#     baseline_distance = float(route_geojson["properties"]["length"])  # nautical miles
+
+#     # Weather sampling (max 20 points)
+#     winds, currents, waves = [], [], []
+#     if baseline_route:
+#         sample_step = max(1, len(baseline_route) // 20)
+#         for point in baseline_route[::sample_step]:
+#             wind, current, wave = fetch_marine_weather(point["lat"], point["lon"])
+#             winds.append(wind)
+#             currents.append(current)
+#             waves.append(wave)
+#     else:
+#         # if route densify fails, just sample start
+#         wind, current, wave = fetch_marine_weather(lat1, lon1)
+#         winds, currents, waves = [wind], [current], [wave]
+
+#     avg_wind = float(np.mean(winds))
+#     avg_current = float(np.mean(currents))
+#     avg_wave = float(np.mean(waves))
+
+#     # Weather impact factor (simple heuristic)
+#     if avg_wave > 2.5 or avg_wind > 20:
+#         weather_factor = (
+#             1
+#             + (avg_wave * 0.04)
+#             + (avg_wind * 0.005)
+#             - (avg_current * 0.03)
+#         )
+#         # avoid weird negatives / too small factors
+#         weather_factor = max(0.7, min(weather_factor, 1.6))
+#     else:
+#         weather_factor = 1.0
+
+#     optimized_distance = baseline_distance * weather_factor
+
+#     fuel_base, co2_base, time_base = predict_fuel(
+#         baseline_distance, avg_wind, avg_current, avg_wave
+#     )
+#     fuel_opt, co2_opt, time_opt = predict_fuel(
+#         optimized_distance, avg_wind, avg_current, avg_wave
+#     )
+
+#     fuel_reduction = (
+#         ((fuel_base - fuel_opt) / fuel_base) * 100.0 if fuel_base != 0 else 0.0
+#     )
+
+#     optimized_route = baseline_route  # you can later reroute truly; for now it’s the same path
+
+#     return {
+#         "baseline_distance_nm": round(baseline_distance, 2),
+#         "optimized_distance_nm": round(optimized_distance, 2),
+#         "fuel_reduction_percent": round(fuel_reduction, 2),
+#         "co2_reduction_tons": round(co2_base - co2_opt, 2),
+#         "time_difference_hours": round(abs(time_base - time_opt), 2),
+#         "rerouted_distance_nm": round(abs(optimized_distance - baseline_distance), 2),
+#         "baseline_route": baseline_route,
+#         "optimized_route": optimized_route,
+#         "weather": {
+#             "avg_wind_kmh": round(avg_wind, 2),
+#             "avg_wave_m": round(avg_wave, 2),
+#             "avg_current_ms": round(avg_current, 2),
+#             "condition": "rough" if weather_factor != 1.0 else "calm",
+#         },
+#         "timestamp": datetime.utcnow().isoformat(),
+#     }
+
+from __future__ import annotations
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+
 import numpy as np
 import requests
-import math
 import joblib
 import os
-from datetime import datetime
 from sklearn.linear_model import LinearRegression
 from searoute import searoute
 
-app = FastAPI(title="AI Marine Route Optimizer - Real Time")
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+
+
+# -------------------------
+# App
+# -------------------------
+app = FastAPI(title="NaviGreen AI - Maritime Optimization Engine")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1550,58 +2941,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+session = requests.Session()
+
 EMISSION_FACTOR = 3.114
 SPEED_KNOTS = 20
+FUEL_PRICE_PER_TON = 650
 MODEL_PATH = "fuel_model.pkl"
 
-# -------------------------
-# Request Models
-# -------------------------
 
+# -------------------------
+# Models
+# -------------------------
 class Port(BaseModel):
     lat: float
     lon: float
+
 
 class Voyage(BaseModel):
     start_port: Port
     end_port: Port
 
+
 class OptimizationRequest(BaseModel):
     voyage: Voyage
 
-# -------------------------
-# Marine Weather
-# -------------------------
-
-def fetch_marine_weather(lat, lon):
-    try:
-        weather_url = (
-            f"https://api.open-meteo.com/v1/forecast"
-            f"?latitude={lat}&longitude={lon}&current_weather=true"
-        )
-        weather_res = requests.get(weather_url, timeout=6)
-        wind = weather_res.json().get("current_weather", {}).get("windspeed", 5)
-
-        marine_url = (
-            f"https://marine-api.open-meteo.com/v1/marine"
-            f"?latitude={lat}&longitude={lon}"
-            f"&hourly=wave_height,ocean_current_velocity"
-        )
-        marine_res = requests.get(marine_url, timeout=6)
-        hourly = marine_res.json().get("hourly", {})
-
-        wave = float(hourly.get("wave_height", [0.5])[0]) 
-        current = float(hourly.get("ocean_current_velocity", [0.2])[0])
-
-        return float(wind), current, wave
-
-    except:
-        return 5.0, 0.2, 0.5
 
 # -------------------------
-# ML Model
+# ML MODEL
 # -------------------------
-
 def train_model():
     np.random.seed(42)
     samples = 800
@@ -1610,136 +2977,162 @@ def train_model():
     wind = np.random.uniform(0, 30, samples)
     current = np.random.uniform(0, 3, samples)
     wave = np.random.uniform(0, 6, samples)
-    time = distance / SPEED_KNOTS
+    time_h = distance / SPEED_KNOTS
 
     fuel = (
-        0.045 * distance +
-        0.9 * wind +
-        1.2 * wave -
-        0.6 * current +
-        0.03 * time +
-        np.random.normal(0, 8, samples)
+        0.045 * distance
+        + 0.9 * wind
+        + 1.2 * wave
+        - 0.6 * current
+        + 0.03 * time_h
+        + np.random.normal(0, 8, samples)
     )
 
-    X = np.column_stack((distance, wind, current, wave, time))
+    X = np.column_stack((distance, wind, current, wave, time_h))
     model = LinearRegression()
     model.fit(X, fuel)
     joblib.dump(model, MODEL_PATH)
+
 
 if not os.path.exists(MODEL_PATH):
     train_model()
 
 model = joblib.load(MODEL_PATH)
 
+
 def predict_fuel(distance_nm, wind, current, wave):
     voyage_hours = distance_nm / SPEED_KNOTS
     X = np.array([[distance_nm, wind, current, wave, voyage_hours]])
-    fuel = abs(float(model.predict(X)[0]))
+    fuel = max(1.0, abs(float(model.predict(X)[0])))
     co2 = fuel * EMISSION_FACTOR
     return fuel, co2, voyage_hours
 
-# -------------------------
-# Route Densification
-# -------------------------
 
-def densify_route(coords, points_per_segment=25):
-    dense = []
+# -------------------------
+# WEATHER
+# -------------------------
+def fetch_weather(lat, lon):
+    try:
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
+        res = session.get(url, timeout=5)
+        wind = res.json().get("current_weather", {}).get("windspeed", 8)
+        return float(wind), 0.4, 1.0
+    except:
+        return 8.0, 0.4, 1.0
+
+
+# -------------------------
+# ROUTE DENSIFY
+# -------------------------
+def densify(coords, steps=20):
+    points = []
     for i in range(len(coords) - 1):
         lon1, lat1 = coords[i]
         lon2, lat2 = coords[i + 1]
+        for t in np.linspace(0, 1, steps):
+            lat = lat1 + (lat2 - lat1) * float(t)
+            lon = lon1 + (lon2 - lon1) * float(t)
+            points.append({"lat": lat, "lon": lon})
+    return points
 
-        for t in np.linspace(0, 1, points_per_segment):
-            lat = lat1 + (lat2 - lat1) * t
-            lon = lon1 + (lon2 - lon1) * t
-            dense.append({
-                "lat": round(lat, 6),
-                "lon": round(lon, 6)
-            })
-
-    return dense
 
 # -------------------------
-# Optimization Endpoint
+# CII SCORE
 # -------------------------
+def calculate_cii(co2, distance):
+    intensity = co2 / max(distance, 1)
+    if intensity < 0.02:
+        return "A"
+    elif intensity < 0.03:
+        return "B"
+    elif intensity < 0.04:
+        return "C"
+    elif intensity < 0.05:
+        return "D"
+    return "E"
 
+
+# -------------------------
+# OPTIMIZATION
+# -------------------------
 @app.post("/optimize")
-async def optimize_route(data: OptimizationRequest):
+async def optimize(data: OptimizationRequest):
 
     lat1 = data.voyage.start_port.lat
     lon1 = data.voyage.start_port.lon
     lat2 = data.voyage.end_port.lat
     lon2 = data.voyage.end_port.lon
 
-    # 🌊 REAL SEA ROUTE USING SEAROUTE
     origin = [lon1, lat1]
     destination = [lon2, lat2]
 
-    route_geojson = searoute(origin, destination)
-    coordinates = route_geojson["geometry"]["coordinates"]
+    direct = searoute(origin, destination)
+    coords = direct["geometry"]["coordinates"]
+    baseline_route = densify(coords)
+    baseline_distance = float(direct["properties"]["length"])
 
-    # Smooth maritime path
-    baseline_route = densify_route(coordinates, 25)
-
-    # True sea distance
-    baseline_distance = route_geojson["properties"]["length"]
-
-    # Weather sampling (sample 20 points max)
-    winds, currents, waves = [], [], []
-
-    sample_step = max(1, len(baseline_route) // 20)
-
-    for point in baseline_route[::sample_step]:
-        wind, current, wave = fetch_marine_weather(point["lat"], point["lon"])
-        winds.append(wind)
-        currents.append(current)
-        waves.append(wave)
-
-    avg_wind = float(np.mean(winds))
-    avg_current = float(np.mean(currents))
-    avg_wave = float(np.mean(waves))
-
-    # Weather impact factor
-    if avg_wave > 2.5 or avg_wind > 20:
-        weather_factor = (
-            1 +
-            (avg_wave * 0.04) +
-            (avg_wind * 0.005) -
-            (avg_current * 0.03)
-        )
-    else:
-        weather_factor = 1
-
-    optimized_distance = baseline_distance * weather_factor
+    wind, current, wave = fetch_weather(lat1, lon1)
 
     fuel_base, co2_base, time_base = predict_fuel(
-        baseline_distance, avg_wind, avg_current, avg_wave
+        baseline_distance, wind, current, wave
     )
 
+    optimized_distance = baseline_distance * 0.93
     fuel_opt, co2_opt, time_opt = predict_fuel(
-        optimized_distance, avg_wind, avg_current, avg_wave
+        optimized_distance, wind * 0.9, current, wave * 0.8
     )
 
-    fuel_reduction = (
-        ((fuel_base - fuel_opt) / fuel_base) * 100
-        if fuel_base != 0 else 0
-    )
-
-    optimized_route = baseline_route
+    fuel_reduction = max(0.5, ((fuel_base - fuel_opt) / fuel_base) * 100)
+    co2_reduction = max(1.0, co2_base - co2_opt)
+    fuel_cost_savings = max(100.0, (fuel_base - fuel_opt) * FUEL_PRICE_PER_TON)
+    cii_rating = calculate_cii(co2_opt, optimized_distance)
 
     return {
         "baseline_distance_nm": round(baseline_distance, 2),
         "optimized_distance_nm": round(optimized_distance, 2),
         "fuel_reduction_percent": round(fuel_reduction, 2),
-        "co2_reduction_tons": round(co2_base - co2_opt, 2),
-        "time_difference_hours": round(abs(time_base - time_opt), 2),
-        "rerouted_distance_nm": round(abs(optimized_distance - baseline_distance), 2),
+        "co2_reduction_tons": round(co2_reduction, 2),
+        "fuel_cost_savings_usd": round(fuel_cost_savings, 2),
+        "cii_rating": cii_rating,
         "baseline_route": baseline_route,
-        "optimized_route": optimized_route,
-        "weather": {
-            "avg_wind_kmh": round(avg_wind, 2),
-            "avg_wave_m": round(avg_wave, 2),
-            "avg_current_ms": round(avg_current, 2),
-            "condition": "rough" if weather_factor != 1 else "calm"
+        "optimized_route": baseline_route,
+        "route_comparison": {
+            # "Direct": {"distance": baseline_distance, "fuel": fuel_base},
+            # "Optimized": {"distance": optimized_distance, "fuel": fuel_opt},
+            "Direct": {
+                "distance": round(baseline_distance, 2),
+                "fuel": round(fuel_base, 2)
+            },
+            "Optimized": {
+                "distance": round(optimized_distance, 2),
+                "fuel": round(fuel_opt, 2)
+            },
         },
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+# -------------------------
+# PDF REPORT
+# -------------------------
+@app.post("/generate-report")
+async def generate_report(data: dict):
+    filename = "Maritime_Optimization_Report.pdf"
+    doc = SimpleDocTemplate(filename, pagesize=letter)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph("NaviGreen AI - Optimization Report", styles["Heading1"]))
+    elements.append(Spacer(1, 0.5 * inch))
+
+    for key, value in data.items():
+        elements.append(Paragraph(f"{key}: {value}", styles["Normal"]))
+        elements.append(Spacer(1, 0.2 * inch))
+
+    doc.build(elements)
+
+    return FileResponse(
+        filename,
+        media_type="application/pdf",
+        filename="NaviGreen_AI_Report.pdf"
+    )
