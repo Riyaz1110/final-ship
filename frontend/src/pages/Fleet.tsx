@@ -5,12 +5,19 @@ import { Ship, Search, Plus, Fuel, Clock, Anchor, Waves } from "lucide-react";
 
 type VesselStatus = "En Route" | "Optimizing" | "Docked";
 
+type Port = {
+  lat: number;
+  lon: number;
+};
+
 type Vessel = {
   id: string;
   name: string;
   status: VesselStatus;
   fuel: number;
   eta_hours: number | null;
+  start_port?: Port;
+  end_port?: Port;
 };
 
 const API_BASE = "http://127.0.0.1:8000";
@@ -55,7 +62,10 @@ const Fleet = () => {
   const [status, setStatus] = useState<VesselStatus>("En Route");
   const [fuel, setFuel] = useState("");
   const [eta, setEta] = useState("");
-
+  const [startLat, setStartLat] = useState("");
+  const [startLon, setStartLon] = useState("");
+  const [endLat, setEndLat] = useState("");
+  const [endLon, setEndLon] = useState("");
   // UI controls
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"All" | VesselStatus>("All");

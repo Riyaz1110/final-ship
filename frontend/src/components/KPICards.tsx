@@ -111,6 +111,9 @@
 // };
 
 // export default KPICards;
+
+
+
 import { useEffect, useRef, useState } from "react";
 import { Fuel, Leaf, Clock, Route, DollarSign, Award } from "lucide-react";
 
@@ -206,6 +209,9 @@ const KPICardNumber = ({
         </span>
         <span className="text-sm text-muted-foreground">{unit}</span>
       </div>
+
+      <div className="text-center mt-6">
+</div>
     </div>
   );
 };

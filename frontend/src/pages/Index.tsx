@@ -822,6 +822,304 @@
 // };
 
 // export default Index;
+// import { useState, useCallback } from "react";
+// import axios from "axios";
+// import Navbar from "@/components/Navbar";
+// import Footer from "@/components/Footer";
+// import HeroSection, { RouteInput } from "@/components/HeroSection";
+// import KPICards from "@/components/KPICards";
+// import MapSection from "@/components/MapSection";
+// import AISummaryPanel from "@/components/AISummaryPanel";
+// import { useOptimization } from "@/context/OptimizationContext";
+
+// const Index = () => {
+//   const [isOptimizing, setIsOptimizing] = useState(false);
+//   const { data, setData } = useOptimization();
+
+//   const handleOptimize = useCallback(
+//     async (input: RouteInput) => {
+//       try {
+//         setIsOptimizing(true);
+
+//         const response = await axios.post(
+//           `${import.meta.env.VITE_API_URL}/optimize`,
+//           {
+//             voyage: {
+//               start_port: {
+//                 lat: Number(input.startLat),
+//                 lon: Number(input.startLon),
+//               },
+//               end_port: {
+//                 lat: Number(input.endLat),
+//                 lon: Number(input.endLon),
+//               },
+//             },
+//             vessel: {
+//               vessel_type: "container",
+//               cargo_tons: 30000,
+//               engine_power_kw: 15000,
+//             },
+//           }
+//         );
+
+//         const res = response.data;
+
+// //         setData({
+// //   fuelSaved: res.fuel_reduction_percent,
+// //   co2Reduction: res.co2_reduction_tons,
+// //   fuelCostSavings: res.fuel_cost_savings_usd,
+// //   ciiRating: res.cii_rating,
+// //   baselineDistance: res.baseline_distance_nm,
+// //   optimizedDistance: res.optimized_distance_nm,
+// //   baselineRoute: res.baseline_route,
+// //   optimizedRoute: res.optimized_route,
+// //   routeComparison: res.route_comparison,
+// //   timestamp: res.timestamp,
+// // });
+// setData({
+//   fuelSaved: res.fuel_reduction_percent ?? 0,
+//   co2Reduction: res.co2_reduction_tons ?? 0,
+//   timeSaved: res.time_difference_hours ?? 0,
+//   distanceRerouted: res.rerouted_distance_nm ?? 0,
+//   fuelCostSavings: res.fuel_cost_savings_usd ?? 0,
+//   ciiRating: res.cii_rating ?? "C",
+//   baselineDistance: res.baseline_distance_nm ?? 0,
+//   optimizedDistance: res.optimized_distance_nm ?? 0,
+//   baselineRoute: res.baseline_route ?? [],
+//   optimizedRoute: res.optimized_route ?? [],
+//   routeComparison: res.route_comparison ?? {},
+//   timestamp: res.timestamp ?? "",
+// });
+//       } catch (error) {
+//         console.error("Optimization error:", error);
+//         alert("Backend connection failed.");
+//       } finally {
+//         setIsOptimizing(false);
+//       }
+//     },
+//     [setData]
+//   );
+//   const downloadReport = async () => {
+//   const response = await axios.post(
+//     `${import.meta.env.VITE_API_URL}/generate-report`,
+//     data,
+//     { responseType: "blob" }
+//   );
+
+//   const url = window.URL.createObjectURL(new Blob([response.data]));
+//   const link = document.createElement("a");
+//   link.href = url;
+//   link.setAttribute("download", "NaviGreen_Report.pdf");
+//   document.body.appendChild(link);
+//   link.click();
+// };
+
+//   return (
+//     <div className="min-h-screen ocean-gradient flex flex-col">
+//       <Navbar />
+//       <main className="flex-1">
+//         <HeroSection onOptimize={handleOptimize} isOptimizing={isOptimizing} />
+
+//         <div className="section-divider max-w-7xl mx-auto" />
+
+//         <KPICards data={data} visible={!!data} />
+// {data?.routeComparison && (
+//   <div className="glass-card p-6 max-w-7xl mx-auto mt-6">
+//     <h3 className="text-lg font-semibold mb-4">Route Comparison</h3>
+//     <table className="w-full text-sm">
+//       <thead>
+//         <tr>
+//           <th>Route</th>
+//           <th>Distance (nm)</th>
+//           <th>Fuel (tons)</th>
+//         </tr>
+//       </thead>
+//       <tbody>
+//         {Object.entries(data.routeComparison).map(([key,val]:any)=>(
+//           <tr key={key}>
+//             <td>{key}</td>
+//             <td>{val.distance}</td>
+//             <td>{val.fuel}</td>
+//           </tr>
+//         ))}
+//       </tbody>
+//     </table>
+//   </div>
+// )}
+//         <MapSection
+//           baselineRoute={data?.baselineRoute}
+//           optimizedRoute={data?.optimizedRoute}
+//           visible={!!data}
+//         />
+
+//         <AISummaryPanel
+//           summary={
+//             data
+//               ? `Baseline Distance: ${data.baselineDistance} nm | Optimized Distance: ${data.optimizedDistance} nm`
+//               : null
+//           }
+//           visible={!!data}
+//         />
+//       </main>
+//       <Footer />
+//     </div>
+//   );
+// };
+
+// export default Index;
+
+// import { useState, useCallback } from "react";
+// import axios from "axios";
+// import Navbar from "@/components/Navbar";
+// import Footer from "@/components/Footer";
+// import HeroSection, { RouteInput } from "@/components/HeroSection";
+// import KPICards from "@/components/KPICards";
+// import MapSection from "@/components/MapSection";
+// import AISummaryPanel from "@/components/AISummaryPanel";
+// import { useOptimization } from "@/context/OptimizationContext";
+
+// const Index = () => {
+//   const [isOptimizing, setIsOptimizing] = useState(false);
+//   const { data, setData } = useOptimization();
+
+//   const handleOptimize = useCallback(
+//     async (input: RouteInput) => {
+//       try {
+//         setIsOptimizing(true);
+
+//         const response = await axios.post(
+//           `${import.meta.env.VITE_API_URL}/optimize`,
+//           {
+//             voyage: {
+//               start_port: {
+//                 lat: Number(input.startLat),
+//                 lon: Number(input.startLon),
+//               },
+//               end_port: {
+//                 lat: Number(input.endLat),
+//                 lon: Number(input.endLon),
+//               },
+//             },
+//           }
+//         );
+
+//         const res = response.data;
+
+//         setData({
+//           fuelSaved: res.fuel_reduction_percent ?? 0,
+//           co2Reduction: res.co2_reduction_tons ?? 0,
+//           timeSaved: 0, // backend not returning this
+//           distanceRerouted: 0, // backend not returning this
+//           fuelCostSavings: res.fuel_cost_savings_usd ?? 0,
+//           ciiRating: res.cii_rating ?? "C",
+//           baselineDistance: res.baseline_distance_nm ?? 0,
+//           optimizedDistance: res.optimized_distance_nm ?? 0,
+//           baselineRoute: res.baseline_route ?? [],
+//           optimizedRoute: res.optimized_route ?? [],
+//           routeComparison: res.route_comparison ?? {},
+//           timestamp: res.timestamp ?? "",
+//           weatherSamples: res.weather_samples ?? [],
+//         });
+//       } catch (error) {
+//         console.error("Optimization error:", error);
+//         alert("Backend connection failed.");
+//       } finally {
+//         setIsOptimizing(false);
+//       }
+//     },
+//     [setData]
+//   );
+
+//   const downloadReport = async () => {
+//     if (!data) return;
+
+//     const response = await axios.post(
+//       `${import.meta.env.VITE_API_URL}/generate-report`,
+//       data,
+//       { responseType: "blob" }
+//     );
+
+//     const url = window.URL.createObjectURL(new Blob([response.data]));
+//     const link = document.createElement("a");
+//     link.href = url;
+//     link.setAttribute("download", "NaviGreen_Report.pdf");
+//     document.body.appendChild(link);
+//     link.click();
+//   };
+
+//   return (
+//     <div className="min-h-screen ocean-gradient flex flex-col">
+//       <Navbar />
+//       <main className="flex-1">
+//         <HeroSection onOptimize={handleOptimize} isOptimizing={isOptimizing} />
+
+//         <div className="section-divider max-w-7xl mx-auto" />
+
+//         <KPICards data={data} visible={!!data} />
+
+//         {/* ✅ DOWNLOAD BUTTON */}
+//         {data && (
+//           <div className="text-center mt-6">
+//             <button
+//               onClick={downloadReport}
+//               className="bg-primary text-white px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition"
+//             >
+//               📄 Download Optimization Report
+//             </button>
+//           </div>
+//         )}
+
+//         {/* ✅ ROUTE COMPARISON TABLE */}
+//         {data?.routeComparison && (
+//           <div className="glass-card p-6 max-w-7xl mx-auto mt-6">
+//             <h3 className="text-lg font-semibold mb-4">
+//               Route Comparison
+//             </h3>
+//             <table className="w-full text-sm">
+//               <thead>
+//                 <tr>
+//                   <th>Route</th>
+//                   <th>Distance (nm)</th>
+//                   <th>Fuel (tons)</th>
+//                 </tr>
+//               </thead>
+//               <tbody>
+//                 {Object.entries(data.routeComparison).map(
+//                   ([key, val]: any) => (
+//                     <tr key={key}>
+//                       <td>{key}</td>
+//                       <td>{val.distance}</td>
+//                       <td>{val.fuel}</td>
+//                     </tr>
+//                   )
+//                 )}
+//               </tbody>
+//             </table>
+//           </div>
+//         )}
+
+//         <MapSection
+//   baselineRoute={data?.baselineRoute}
+//   optimizedRoute={data?.optimizedRoute}
+//   weatherSamples={data?.weatherSamples}
+//   visible={!!data}
+// />
+
+//         <AISummaryPanel
+//           summary={
+//             data
+//               ? `Baseline Distance: ${data.baselineDistance} nm | Optimized Distance: ${data.optimizedDistance} nm`
+//               : null
+//           }
+//           visible={!!data}
+//         />
+//       </main>
+//       <Footer />
+//     </div>
+//   );
+// };
+
+// export default Index;
 import { useState, useCallback } from "react";
 import axios from "axios";
 import Navbar from "@/components/Navbar";
@@ -854,42 +1152,30 @@ const Index = () => {
                 lon: Number(input.endLon),
               },
             },
-            vessel: {
-              vessel_type: "container",
-              cargo_tons: 30000,
-              engine_power_kw: 15000,
-            },
           }
         );
 
         const res = response.data;
 
-//         setData({
-//   fuelSaved: res.fuel_reduction_percent,
-//   co2Reduction: res.co2_reduction_tons,
-//   fuelCostSavings: res.fuel_cost_savings_usd,
-//   ciiRating: res.cii_rating,
-//   baselineDistance: res.baseline_distance_nm,
-//   optimizedDistance: res.optimized_distance_nm,
-//   baselineRoute: res.baseline_route,
-//   optimizedRoute: res.optimized_route,
-//   routeComparison: res.route_comparison,
-//   timestamp: res.timestamp,
-// });
-setData({
-  fuelSaved: res.fuel_reduction_percent ?? 0,
-  co2Reduction: res.co2_reduction_tons ?? 0,
-  timeSaved: res.time_difference_hours ?? 0,
-  distanceRerouted: res.rerouted_distance_nm ?? 0,
-  fuelCostSavings: res.fuel_cost_savings_usd ?? 0,
-  ciiRating: res.cii_rating ?? "C",
-  baselineDistance: res.baseline_distance_nm ?? 0,
-  optimizedDistance: res.optimized_distance_nm ?? 0,
-  baselineRoute: res.baseline_route ?? [],
-  optimizedRoute: res.optimized_route ?? [],
-  routeComparison: res.route_comparison ?? {},
-  timestamp: res.timestamp ?? "",
-});
+        setData({
+          fuelSaved: res.fuel_reduction_percent ?? 0,
+          co2Reduction: res.co2_reduction_tons ?? 0,
+          timeSaved: res.time_saved_hours ?? 0,
+          distanceRerouted:
+            Math.abs(
+              (res.baseline_distance_nm ?? 0) -
+                (res.optimized_distance_nm ?? 0)
+            ) ?? 0,
+          fuelCostSavings: res.fuel_cost_savings_usd ?? 0,
+          ciiRating: res.cii_rating ?? "C",
+          baselineDistance: res.baseline_distance_nm ?? 0,
+          optimizedDistance: res.optimized_distance_nm ?? 0,
+          baselineRoute: res.baseline_route ?? [],
+          optimizedRoute: res.optimized_route ?? [],
+          routeComparison: res.route_comparison ?? {},
+          weatherSamples: res.weather_samples ?? [],
+          timestamp: res.timestamp ?? "",
+        });
       } catch (error) {
         console.error("Optimization error:", error);
         alert("Backend connection failed.");
@@ -900,41 +1186,116 @@ setData({
     [setData]
   );
 
+  const downloadReport = async () => {
+    if (!data) return;
+
+    const response = await axios.post(
+      `${import.meta.env.VITE_API_URL}/generate-report`,
+      data,
+      { responseType: "blob" }
+    );
+
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "NaviGreen_Report.pdf");
+    document.body.appendChild(link);
+    link.click();
+  };
+
   return (
     <div className="min-h-screen ocean-gradient flex flex-col">
       <Navbar />
       <main className="flex-1">
-        <HeroSection onOptimize={handleOptimize} isOptimizing={isOptimizing} />
+        <HeroSection
+          onOptimize={handleOptimize}
+          isOptimizing={isOptimizing}
+        />
 
         <div className="section-divider max-w-7xl mx-auto" />
 
         <KPICards data={data} visible={!!data} />
-{data?.routeComparison && (
+
+        {/* 📄 Download Button */}
+        {data && (
+          <div className="text-center mt-6">
+            <button
+              onClick={downloadReport}
+              className="bg-primary text-white px-6 py-3 rounded-xl shadow-lg hover:scale-105 transition"
+            >
+              📄 Download Optimization Report
+            </button>
+          </div>
+        )}
+
+        {/* 📊 Route Comparison Table */}
+        {/* {data?.routeComparison &&
+          Object.keys(data.routeComparison).length > 0 && (
+            <div className="glass-card p-6 max-w-7xl mx-auto mt-6">
+              <h3 className="text-lg font-semibold mb-4">
+                Route Comparison
+              </h3>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th>Route</th>
+                    <th>Distance (nm)</th>
+                    <th>Fuel (tons)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(data.routeComparison).map(
+                    ([key, val]: any) => (
+                      <tr key={key}>
+                        <td>{key}</td>
+                        <td>{val.distance}</td>
+                        <td>{val.fuel}</td>
+                      </tr>
+                    )
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )} */}
+          {data?.routeComparison && (
   <div className="glass-card p-6 max-w-7xl mx-auto mt-6">
-    <h3 className="text-lg font-semibold mb-4">Route Comparison</h3>
-    <table className="w-full text-sm">
-      <thead>
-        <tr>
-          <th>Route</th>
-          <th>Distance (nm)</th>
-          <th>Fuel (tons)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {Object.entries(data.routeComparison).map(([key,val]:any)=>(
-          <tr key={key}>
-            <td>{key}</td>
-            <td>{val.distance}</td>
-            <td>{val.fuel}</td>
+    <h3 className="text-lg font-semibold mb-6 text-center">
+      Route Comparison
+    </h3>
+
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm text-center">
+        <thead>
+          <tr className="border-b border-border/50">
+            <th className="py-3">Route</th>
+            <th className="py-3">Distance (nm)</th>
+            <th className="py-3">Fuel (tons)</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+
+        <tbody>
+          {Object.entries(data.routeComparison).map(
+            ([key, val]: any) => (
+              <tr
+                key={key}
+                className="border-b border-border/30 hover:bg-white/5 transition"
+              >
+                <td className="py-3 font-medium">{key}</td>
+                <td className="py-3">{val.distance}</td>
+                <td className="py-3">{val.fuel}</td>
+              </tr>
+            )
+          )}
+        </tbody>
+      </table>
+    </div>
   </div>
 )}
+
         <MapSection
           baselineRoute={data?.baselineRoute}
           optimizedRoute={data?.optimizedRoute}
+          weatherSamples={data?.weatherSamples}
           visible={!!data}
         />
 

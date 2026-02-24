@@ -112,24 +112,73 @@
 
 //   return context;
 // };
+
+// import { createContext, useContext, useState } from "react";
+
+// export interface OptimizationData {
+//   fuelSaved: number;
+//   co2Reduction: number;
+//   fuelCostSavings: number;
+//   ciiRating: string;
+//   baselineDistance: number;
+//   optimizedDistance: number;
+//   baselineRoute: any[];
+//   optimizedRoute: any[];
+//   routeComparison: any;
+//   timestamp: string;
+// }
+
+// const OptimizationContext = createContext<any>(null);
+
+// export const OptimizationProvider = ({ children }: any) => {
+//   const [data, setData] = useState<OptimizationData | null>(null);
+
+//   return (
+//     <OptimizationContext.Provider value={{ data, setData }}>
+//       {children}
+//     </OptimizationContext.Provider>
+//   );
+// };
+
+// export const useOptimization = () => useContext(OptimizationContext);
 import { createContext, useContext, useState } from "react";
+
+export interface WeatherPoint {
+  lat: number;
+  lon: number;
+  wind: number;
+}
 
 export interface OptimizationData {
   fuelSaved: number;
   co2Reduction: number;
   fuelCostSavings: number;
   ciiRating: string;
+
   baselineDistance: number;
   optimizedDistance: number;
+
   baselineRoute: any[];
   optimizedRoute: any[];
+
   routeComparison: any;
+
+  timeSaved: number;
+  distanceRerouted: number;
+
+  weatherSamples: WeatherPoint[];
+
   timestamp: string;
 }
 
-const OptimizationContext = createContext<any>(null);
+interface OptimizationContextType {
+  data: OptimizationData | null;
+  setData: (data: OptimizationData) => void;
+}
 
-export const OptimizationProvider = ({ children }: any) => {
+const OptimizationContext = createContext<OptimizationContextType | null>(null);
+
+export const OptimizationProvider = ({ children }: { children: React.ReactNode }) => {
   const [data, setData] = useState<OptimizationData | null>(null);
 
   return (
@@ -139,4 +188,12 @@ export const OptimizationProvider = ({ children }: any) => {
   );
 };
 
-export const useOptimization = () => useContext(OptimizationContext);
+export const useOptimization = () => {
+  const context = useContext(OptimizationContext);
+
+  if (!context) {
+    throw new Error("useOptimization must be used inside OptimizationProvider");
+  }
+
+  return context;
+};

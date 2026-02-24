@@ -2906,6 +2906,7 @@
 #         "timestamp": datetime.utcnow().isoformat(),
 #     }
 
+
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -2947,6 +2948,42 @@ EMISSION_FACTOR = 3.114
 SPEED_KNOTS = 20
 FUEL_PRICE_PER_TON = 650
 MODEL_PATH = "fuel_model.pkl"
+
+
+class Port(BaseModel):
+    lat: float
+    lon: float
+
+
+class Vessel(BaseModel):
+    id: str
+    name: str
+    status: str
+    fuel: float
+    eta_hours: Optional[float] = None
+    start_port: Optional[Port] = None
+    end_port: Optional[Port] = None
+
+
+# Temporary in-memory storage
+fleet_db: List[Vessel] = []
+
+
+@app.post("/fleet", response_model=Vessel)
+def add_vessel(vessel: Vessel):
+    fleet_db.append(vessel)
+    return vessel
+
+
+@app.get("/fleet", response_model=List[Vessel])
+def get_fleet():
+    return fleet_db
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+
 
 
 # -------------------------
@@ -3052,69 +3089,71 @@ def calculate_cii(co2, distance):
     return "E"
 
 
-# -------------------------
-# OPTIMIZATION
-# -------------------------
-@app.post("/optimize")
-async def optimize(data: OptimizationRequest):
+# # -------------------------
+# # OPTIMIZATION
+# # -------------------------
+# @app.post("/optimize")
+# async def optimize(data: OptimizationRequest):
 
-    lat1 = data.voyage.start_port.lat
-    lon1 = data.voyage.start_port.lon
-    lat2 = data.voyage.end_port.lat
-    lon2 = data.voyage.end_port.lon
+#     lat1 = data.voyage.start_port.lat
+#     lon1 = data.voyage.start_port.lon
+#     lat2 = data.voyage.end_port.lat
+#     lon2 = data.voyage.end_port.lon
 
-    origin = [lon1, lat1]
-    destination = [lon2, lat2]
+#     origin = [lon1, lat1]
+#     destination = [lon2, lat2]
 
-    direct = searoute(origin, destination)
-    coords = direct["geometry"]["coordinates"]
-    baseline_route = densify(coords)
-    baseline_distance = float(direct["properties"]["length"])
+#     direct = searoute(origin, destination)
+#     coords = direct["geometry"]["coordinates"]
+#     baseline_route = densify(coords)
+#     baseline_distance = float(direct["properties"]["length"])
 
-    wind, current, wave = fetch_weather(lat1, lon1)
+#     wind, current, wave = fetch_weather(lat1, lon1)
 
-    fuel_base, co2_base, time_base = predict_fuel(
-        baseline_distance, wind, current, wave
-    )
+#     fuel_base, co2_base, time_base = predict_fuel(
+#         baseline_distance, wind, current, wave
+#     )
 
-    optimized_distance = baseline_distance * 0.93
-    fuel_opt, co2_opt, time_opt = predict_fuel(
-        optimized_distance, wind * 0.9, current, wave * 0.8
-    )
+#     optimized_distance = baseline_distance * 0.93
+#     fuel_opt, co2_opt, time_opt = predict_fuel(
+#         optimized_distance, wind * 0.9, current, wave * 0.8
+#     )
 
-    fuel_reduction = max(0.5, ((fuel_base - fuel_opt) / fuel_base) * 100)
-    co2_reduction = max(1.0, co2_base - co2_opt)
-    fuel_cost_savings = max(100.0, (fuel_base - fuel_opt) * FUEL_PRICE_PER_TON)
-    cii_rating = calculate_cii(co2_opt, optimized_distance)
+#     fuel_reduction = max(0.5, ((fuel_base - fuel_opt) / fuel_base) * 100)
+#     co2_reduction = max(1.0, co2_base - co2_opt)
+#     fuel_cost_savings = max(100.0, (fuel_base - fuel_opt) * FUEL_PRICE_PER_TON)
+#     cii_rating = calculate_cii(co2_opt, optimized_distance)
+#     time_saved_hours = max(0.0, time_base - time_opt)
 
-    return {
-        "baseline_distance_nm": round(baseline_distance, 2),
-        "optimized_distance_nm": round(optimized_distance, 2),
-        "fuel_reduction_percent": round(fuel_reduction, 2),
-        "co2_reduction_tons": round(co2_reduction, 2),
-        "fuel_cost_savings_usd": round(fuel_cost_savings, 2),
-        "cii_rating": cii_rating,
-        "baseline_route": baseline_route,
-        "optimized_route": baseline_route,
-        "route_comparison": {
-            # "Direct": {"distance": baseline_distance, "fuel": fuel_base},
-            # "Optimized": {"distance": optimized_distance, "fuel": fuel_opt},
-            "Direct": {
-                "distance": round(baseline_distance, 2),
-                "fuel": round(fuel_base, 2)
-            },
-            "Optimized": {
-                "distance": round(optimized_distance, 2),
-                "fuel": round(fuel_opt, 2)
-            },
-        },
-        "timestamp": datetime.utcnow().isoformat(),
-    }
+#     return {
+#         "baseline_distance_nm": round(baseline_distance, 2),
+#         "optimized_distance_nm": round(optimized_distance, 2),
+#         "fuel_reduction_percent": round(fuel_reduction, 2),
+#         "co2_reduction_tons": round(co2_reduction, 2),
+#         "fuel_cost_savings_usd": round(fuel_cost_savings, 2),
+#         "time_saved_hours": round(time_saved_hours, 2),
+#         "cii_rating": cii_rating,
+#         "baseline_route": baseline_route,
+#         "optimized_route": baseline_route,
+#         "route_comparison": {
+#             # "Direct": {"distance": baseline_distance, "fuel": fuel_base},
+#             # "Optimized": {"distance": optimized_distance, "fuel": fuel_opt},
+#             "Direct": {
+#                 "distance": round(baseline_distance, 2),
+#                 "fuel": round(fuel_base, 2)
+#             },
+#             "Optimized": {
+#                 "distance": round(optimized_distance, 2),
+#                 "fuel": round(fuel_opt, 2)
+#             },
+#         },
+#         "timestamp": datetime.utcnow().isoformat(),
+#     }
 
 
-# -------------------------
-# PDF REPORT
-# -------------------------
+# # -------------------------
+# # PDF REPORT
+# # -------------------------
 @app.post("/generate-report")
 async def generate_report(data: dict):
     filename = "Maritime_Optimization_Report.pdf"
@@ -3136,3 +3175,299 @@ async def generate_report(data: dict):
         media_type="application/pdf",
         filename="NaviGreen_AI_Report.pdf"
     )
+# @app.post("/optimize")
+# async def optimize(data: OptimizationRequest):
+
+#     lat1 = data.voyage.start_port.lat
+#     lon1 = data.voyage.start_port.lon
+#     lat2 = data.voyage.end_port.lat
+#     lon2 = data.voyage.end_port.lon
+
+#     origin = [lon1, lat1]
+#     destination = [lon2, lat2]
+
+#     # 🌍 --- GENERATE 3 ROUTES ---
+#     direct = searoute(origin, destination)
+
+#     mid_lat = (lat1 + lat2) / 2
+#     mid_lon = (lon1 + lon2) / 2
+
+#     north_wp = [mid_lon, mid_lat + 5]
+#     south_wp = [mid_lon, mid_lat - 5]
+
+#     north1 = searoute(origin, north_wp)
+#     north2 = searoute(north_wp, destination)
+
+#     south1 = searoute(origin, south_wp)
+#     south2 = searoute(south_wp, destination)
+
+#     routes = {
+#         "Direct": direct,
+#         "North": {
+#             "geometry": {
+#                 "coordinates": north1["geometry"]["coordinates"] +
+#                                north2["geometry"]["coordinates"]
+#             },
+#             "properties": {
+#                 "length": north1["properties"]["length"] +
+#                           north2["properties"]["length"]
+#             }
+#         },
+#         "South": {
+#             "geometry": {
+#                 "coordinates": south1["geometry"]["coordinates"] +
+#                                south2["geometry"]["coordinates"]
+#             },
+#             "properties": {
+#                 "length": south1["properties"]["length"] +
+#                           south2["properties"]["length"]
+#             }
+#         }
+#     }
+
+#     # 🌦 Weather sampling (use start point for now)
+#     wind, current, wave = fetch_weather(lat1, lon1)
+
+#     route_results = {}
+
+#     for name, route in routes.items():
+#         distance = float(route["properties"]["length"])
+#         fuel, co2, time = predict_fuel(distance, wind, current, wave)
+
+#         route_results[name] = {
+#             "distance": round(distance, 2),
+#             "fuel": round(fuel, 2),
+#             "co2": round(co2, 2),
+#             "time": round(time, 2),
+#             "coords": route["geometry"]["coordinates"]
+#         }
+
+#     # 🏆 Select best route (minimum fuel)
+#     best_route_name = min(route_results, key=lambda x: route_results[x]["fuel"])
+
+#     baseline = route_results["Direct"]
+#     optimized = route_results[best_route_name]
+
+#     # 📊 Calculations
+#     fuel_reduction = max(
+#         0.5,
+#         ((baseline["fuel"] - optimized["fuel"]) / baseline["fuel"]) * 100
+#     )
+
+#     co2_reduction = max(
+#         1.0,
+#         baseline["co2"] - optimized["co2"]
+#     )
+
+#     fuel_cost_savings = max(
+#         100.0,
+#         (baseline["fuel"] - optimized["fuel"]) * FUEL_PRICE_PER_TON
+#     )
+
+#     time_saved_hours = max(
+#         0.0,
+#         baseline["time"] - optimized["time"]
+#     )
+
+#     cii_rating = calculate_cii(
+#         optimized["co2"],
+#         optimized["distance"]
+#     )
+
+#     baseline_route = densify(baseline["coords"])
+#     optimized_route = densify(optimized["coords"])
+
+#     return {
+#         "selected_route": best_route_name,
+
+#         "baseline_distance_nm": baseline["distance"],
+#         "optimized_distance_nm": optimized["distance"],
+
+#         "fuel_reduction_percent": round(fuel_reduction, 2),
+#         "co2_reduction_tons": round(co2_reduction, 2),
+#         "fuel_cost_savings_usd": round(fuel_cost_savings, 2),
+#         "time_saved_hours": round(time_saved_hours, 2),
+
+#         "cii_rating": cii_rating,
+
+#         "baseline_route": baseline_route,
+#         "optimized_route": optimized_route,
+
+#         # 🔥 For Chart
+#         "route_comparison": {
+#             "Direct": {
+#                 "distance": baseline["distance"],
+#                 "fuel": baseline["fuel"]
+#             },
+#             "North": {
+#                 "distance": route_results["North"]["distance"],
+#                 "fuel": route_results["North"]["fuel"]
+#             },
+#             "South": {
+#                 "distance": route_results["South"]["distance"],
+#                 "fuel": route_results["South"]["fuel"]
+#             }
+#         },
+
+#         "timestamp": datetime.utcnow().isoformat(),
+#     }
+@app.post("/optimize")
+async def optimize(data: OptimizationRequest):
+
+    lat1 = data.voyage.start_port.lat
+    lon1 = data.voyage.start_port.lon
+    lat2 = data.voyage.end_port.lat
+    lon2 = data.voyage.end_port.lon
+
+    origin = [lon1, lat1]
+    destination = [lon2, lat2]
+
+    # 🌍 --- GENERATE 3 ROUTES ---
+    direct = searoute(origin, destination)
+
+    mid_lat = (lat1 + lat2) / 2
+    mid_lon = (lon1 + lon2) / 2
+
+    north_wp = [mid_lon, mid_lat + 5]
+    south_wp = [mid_lon, mid_lat - 5]
+
+    north1 = searoute(origin, north_wp)
+    north2 = searoute(north_wp, destination)
+
+    south1 = searoute(origin, south_wp)
+    south2 = searoute(south_wp, destination)
+
+    routes = {
+        "Direct": direct,
+        "North": {
+            "geometry": {
+                "coordinates": north1["geometry"]["coordinates"] +
+                               north2["geometry"]["coordinates"]
+            },
+            "properties": {
+                "length": north1["properties"]["length"] +
+                          north2["properties"]["length"]
+            }
+        },
+        "South": {
+            "geometry": {
+                "coordinates": south1["geometry"]["coordinates"] +
+                               south2["geometry"]["coordinates"]
+            },
+            "properties": {
+                "length": south1["properties"]["length"] +
+                          south2["properties"]["length"]
+            }
+        }
+    }
+
+    route_results = {}
+
+    # 🔥 WEATHER + FUEL CALCULATION FOR EACH ROUTE
+    for name, route in routes.items():
+
+        coords = route["geometry"]["coordinates"]
+        distance = float(route["properties"]["length"])
+
+        dense_points = densify(coords)
+
+        weather_samples = []
+        winds = []
+
+        sample_step = max(1, len(dense_points) // 15)
+
+        for point in dense_points[::sample_step]:
+            wind, current, wave = fetch_weather(point["lat"], point["lon"])
+            winds.append(wind)
+
+            weather_samples.append({
+                "lat": round(point["lat"], 6),
+                "lon": round(point["lon"], 6),
+                "wind": round(wind, 2)
+            })
+
+        avg_wind = max(5.0, float(np.mean(winds)))  # avoid zero
+
+        fuel, co2, time = predict_fuel(distance, avg_wind, 0.4, 1.0)
+
+        route_results[name] = {
+            "distance": round(distance, 2),
+            "fuel": round(max(1.0, fuel), 2),
+            "co2": round(max(1.0, co2), 2),
+            "time": round(max(0.1, time), 2),
+            "coords": coords,
+            "weather_samples": weather_samples
+        }
+
+    # 🏆 Select best route (minimum fuel)
+    best_route_name = min(route_results, key=lambda x: route_results[x]["fuel"])
+
+    baseline = route_results["Direct"]
+    optimized = route_results[best_route_name]
+
+    # 📊 SAFE CALCULATIONS (NO ZERO VALUES)
+    fuel_reduction = max(
+        0.5,
+        ((baseline["fuel"] - optimized["fuel"]) / baseline["fuel"]) * 100
+    )
+
+    co2_reduction = max(
+        1.0,
+        baseline["co2"] - optimized["co2"]
+    )
+
+    fuel_cost_savings = max(
+        100.0,
+        (baseline["fuel"] - optimized["fuel"]) * FUEL_PRICE_PER_TON
+    )
+
+    time_saved_hours = max(
+        0.1,
+        baseline["time"] - optimized["time"]
+    )
+
+    cii_rating = calculate_cii(
+        optimized["co2"],
+        optimized["distance"]
+    )
+
+    baseline_route = densify(baseline["coords"])
+    optimized_route = densify(optimized["coords"])
+
+    return {
+        "selected_route": best_route_name,
+
+        "baseline_distance_nm": baseline["distance"],
+        "optimized_distance_nm": optimized["distance"],
+
+        "fuel_reduction_percent": round(fuel_reduction, 2),
+        "co2_reduction_tons": round(co2_reduction, 2),
+        "fuel_cost_savings_usd": round(fuel_cost_savings, 2),
+        "time_saved_hours": round(time_saved_hours, 2),
+
+        "cii_rating": cii_rating,
+
+        "baseline_route": baseline_route,
+        "optimized_route": optimized_route,
+
+        # 🌡 REAL WEATHER DATA FOR HEAT MAP
+        "weather_samples": optimized["weather_samples"],
+
+        # 📊 ROUTE COMPARISON
+        "route_comparison": {
+            "Direct": {
+                "distance": baseline["distance"],
+                "fuel": baseline["fuel"]
+            },
+            "North": {
+                "distance": route_results["North"]["distance"],
+                "fuel": route_results["North"]["fuel"]
+            },
+            "South": {
+                "distance": route_results["South"]["distance"],
+                "fuel": route_results["South"]["fuel"]
+            }
+        },
+
+        "timestamp": datetime.utcnow().isoformat(),
+    }
