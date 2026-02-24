@@ -3154,27 +3154,27 @@ def calculate_cii(co2, distance):
 # # -------------------------
 # # PDF REPORT
 # # -------------------------
-@app.post("/generate-report")
-async def generate_report(data: dict):
-    filename = "Maritime_Optimization_Report.pdf"
-    doc = SimpleDocTemplate(filename, pagesize=letter)
-    styles = getSampleStyleSheet()
-    elements = []
+# @app.post("/generate-report")
+# async def generate_report(data: dict):
+#     filename = "Maritime_Optimization_Report.pdf"
+#     doc = SimpleDocTemplate(filename, pagesize=letter)
+#     styles = getSampleStyleSheet()
+#     elements = []
 
-    elements.append(Paragraph("NaviGreen AI - Optimization Report", styles["Heading1"]))
-    elements.append(Spacer(1, 0.5 * inch))
+#     elements.append(Paragraph("NaviGreen AI - Optimization Report", styles["Heading1"]))
+#     elements.append(Spacer(1, 0.5 * inch))
 
-    for key, value in data.items():
-        elements.append(Paragraph(f"{key}: {value}", styles["Normal"]))
-        elements.append(Spacer(1, 0.2 * inch))
+#     for key, value in data.items():
+#         elements.append(Paragraph(f"{key}: {value}", styles["Normal"]))
+#         elements.append(Spacer(1, 0.2 * inch))
 
-    doc.build(elements)
+#     doc.build(elements)
 
-    return FileResponse(
-        filename,
-        media_type="application/pdf",
-        filename="NaviGreen_AI_Report.pdf"
-    )
+#     return FileResponse(
+#         filename,
+#         media_type="application/pdf",
+#         filename="NaviGreen_AI_Report.pdf"
+#     )
 # @app.post("/optimize")
 # async def optimize(data: OptimizationRequest):
 
@@ -3311,6 +3311,147 @@ async def generate_report(data: dict):
 
 #         "timestamp": datetime.utcnow().isoformat(),
 #     }
+
+# @app.post("/generate-report")
+# async def generate_report(data: dict):
+#     filename = "Maritime_Optimization_Report.pdf"
+#     doc = SimpleDocTemplate(filename, pagesize=letter)
+#     styles = getSampleStyleSheet()
+#     elements = []
+
+#     elements.append(Paragraph("NaviGreen AI - Optimization Report", styles["Heading1"]))
+#     elements.append(Spacer(1, 0.5 * inch))
+
+#     for key, value in data.items():
+#         elements.append(Paragraph(f"{key}: {value}", styles["Normal"]))
+#         elements.append(Spacer(1, 0.2 * inch))
+
+#     doc.build(elements)
+
+#     return FileResponse(
+#         filename,
+#         media_type="application/pdf",
+#         filename="NaviGreen_AI_Report.pdf"
+#     )
+from reportlab.platypus import (
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    Table,
+    TableStyle
+)
+from reportlab.lib import colors
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.units import inch
+from reportlab.lib import enums
+
+
+@app.post("/generate-report")
+async def generate_report(data: dict):
+
+    filename = "NaviGreen_AI_Report.pdf"
+    doc = SimpleDocTemplate(filename, pagesize=letter)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    # ===============================
+    # TITLE
+    # ===============================
+    title_style = ParagraphStyle(
+        name="TitleStyle",
+        parent=styles["Heading1"],
+        alignment=enums.TA_CENTER,
+        spaceAfter=20
+    )
+
+    elements.append(
+        Paragraph("NaviGreen AI - Maritime Optimization Report", title_style)
+    )
+    elements.append(Spacer(1, 0.3 * inch))
+
+    # ===============================
+    # EXECUTIVE SUMMARY
+    # ===============================
+    elements.append(Paragraph("Executive Summary", styles["Heading2"]))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    summary_text = f"""
+    Selected Optimal Route: <b>{data.get('selected_route', 'N/A')}</b><br/>
+    Fuel Reduction: <b>{data.get('fuel_reduction_percent', 0)}%</b><br/>
+    CO₂ Reduction: <b>{data.get('co2_reduction_tons', 0)} tons</b><br/>
+    Fuel Cost Savings: <b>${data.get('fuel_cost_savings_usd', 0)}</b><br/>
+    Time Saved: <b>{data.get('time_saved_hours', 0)} hours</b><br/>
+    IMO CII Rating: <b>{data.get('cii_rating', 'N/A')}</b>
+    """
+
+    elements.append(Paragraph(summary_text, styles["Normal"]))
+    elements.append(Spacer(1, 0.4 * inch))
+
+    # ===============================
+    # ROUTE DISTANCE SECTION
+    # ===============================
+    elements.append(Paragraph("Distance Comparison", styles["Heading2"]))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    distance_text = f"""
+    Baseline Distance: <b>{data.get('baseline_distance_nm', 0)} nm</b><br/>
+    Optimized Distance: <b>{data.get('optimized_distance_nm', 0)} nm</b>
+    """
+
+    elements.append(Paragraph(distance_text, styles["Normal"]))
+    elements.append(Spacer(1, 0.4 * inch))
+
+    # ===============================
+    # ROUTE COMPARISON TABLE
+    # ===============================
+    elements.append(Paragraph("Route Comparison Analysis", styles["Heading2"]))
+    elements.append(Spacer(1, 0.2 * inch))
+
+    route_comparison = data.get("route_comparison", {})
+
+    table_data = [["Route", "Distance (nm)", "Fuel (tons)"]]
+
+    for route, values in route_comparison.items():
+        table_data.append([
+            route,
+            values.get("distance", 0),
+            values.get("fuel", 0)
+        ])
+
+    table = Table(table_data, hAlign="LEFT")
+
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 10),
+        ("ALIGN", (1, 1), (-1, -1), "CENTER"),
+        ("ROWHEIGHT", (0, 0), (-1, -1), 18),
+    ]))
+
+    elements.append(table)
+    elements.append(Spacer(1, 0.5 * inch))
+
+    # ===============================
+    # FOOTER
+    # ===============================
+    elements.append(
+        Paragraph(
+            f"Report Generated On: {data.get('timestamp', '')}",
+            styles["Italic"]
+        )
+    )
+
+    # BUILD PDF
+    doc.build(elements)
+
+    return FileResponse(
+        filename,
+        media_type="application/pdf",
+        filename="NaviGreen_AI_Report.pdf"
+    )
 @app.post("/optimize")
 async def optimize(data: OptimizationRequest):
 

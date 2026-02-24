@@ -141,6 +141,65 @@
 // };
 
 // export const useOptimization = () => useContext(OptimizationContext);
+
+
+
+// import { createContext, useContext, useState } from "react";
+
+// export interface WeatherPoint {
+//   lat: number;
+//   lon: number;
+//   wind: number;
+// }
+
+// export interface OptimizationData {
+//   fuelSaved: number;
+//   co2Reduction: number;
+//   fuelCostSavings: number;
+//   ciiRating: string;
+
+//   baselineDistance: number;
+//   optimizedDistance: number;
+
+//   baselineRoute: any[];
+//   optimizedRoute: any[];
+
+//   routeComparison: any;
+
+//   timeSaved: number;
+//   distanceRerouted: number;
+
+//   weatherSamples: WeatherPoint[];
+
+//   timestamp: string;
+// }
+
+// interface OptimizationContextType {
+//   data: OptimizationData | null;
+//   setData: (data: OptimizationData) => void;
+// }
+
+// const OptimizationContext = createContext<OptimizationContextType | null>(null);
+
+// export const OptimizationProvider = ({ children }: { children: React.ReactNode }) => {
+//   const [data, setData] = useState<OptimizationData | null>(null);
+
+//   return (
+//     <OptimizationContext.Provider value={{ data, setData }}>
+//       {children}
+//     </OptimizationContext.Provider>
+//   );
+// };
+
+// export const useOptimization = () => {
+//   const context = useContext(OptimizationContext);
+
+//   if (!context) {
+//     throw new Error("useOptimization must be used inside OptimizationProvider");
+//   }
+
+//   return context;
+// };
 import { createContext, useContext, useState } from "react";
 
 export interface WeatherPoint {
@@ -150,6 +209,8 @@ export interface WeatherPoint {
 }
 
 export interface OptimizationData {
+  selectedRoute: string;
+
   fuelSaved: number;
   co2Reduction: number;
   fuelCostSavings: number;
@@ -161,7 +222,13 @@ export interface OptimizationData {
   baselineRoute: any[];
   optimizedRoute: any[];
 
-  routeComparison: any;
+  routeComparison: Record<
+    string,
+    {
+      distance: number;
+      fuel: number;
+    }
+  >;
 
   timeSaved: number;
   distanceRerouted: number;
@@ -176,10 +243,17 @@ interface OptimizationContextType {
   setData: (data: OptimizationData) => void;
 }
 
-const OptimizationContext = createContext<OptimizationContextType | null>(null);
+const OptimizationContext =
+  createContext<OptimizationContextType | null>(null);
 
-export const OptimizationProvider = ({ children }: { children: React.ReactNode }) => {
-  const [data, setData] = useState<OptimizationData | null>(null);
+export const OptimizationProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const [data, setData] = useState<OptimizationData | null>(
+    null
+  );
 
   return (
     <OptimizationContext.Provider value={{ data, setData }}>
@@ -192,7 +266,9 @@ export const useOptimization = () => {
   const context = useContext(OptimizationContext);
 
   if (!context) {
-    throw new Error("useOptimization must be used inside OptimizationProvider");
+    throw new Error(
+      "useOptimization must be used inside OptimizationProvider"
+    );
   }
 
   return context;
